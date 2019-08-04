@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<link rel="shortcut icon" type="image/png" href="favicon.png">
+	<title>bodjo/{name}</title>
+	<link rel="stylesheet" type="text/css" href="/styles.css">
+	<link href="https://fonts.googleapis.com/css?family=Roboto+Mono:400,700|Source+Code+Pro:400,700&display=swap&subset=cyrillic" rel="stylesheet">
+</head>
+<body>
+	<div id="main">
+		<div id="workspace">
+			<div id="bar">
+				<a href="https://bodjo.net/" id="back" class="btn">← Обратно на bodjo.net</a>
+				<div id="tabs-container">
+					<div class="tab btn active" id="docs-tab">Документация</div>
+					<div class="tab btn" id="code-tab">Код</div>
+					<div class="tab btn" id="scoreboard-tab">Таблица</div>
+				</div>
+			</div>
+			<div id="container">
+				<div id="docs-page" class="active">
+					docs
+				</div>
+				<div id="code-page">
+					<div id="code-wrapper">
+						<div id="code"></div>
+					</div>
+					<div id="controls"></div>
+				</div>
+				<div id="scoreboard-page">
+					scoreboard
+				</div>
+			</div>
+
+			<div id="resizer"></div>
+		</div>
+		<div id="game">
+			<div id="canvas-container">
+				<canvas></canvas>
+			</div>
+		</div>
+	</div>
+	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+	<script type="text/javascript" src="/polyfills.js"></script>
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.3.3/ace.js"></script>
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.3.3/mode-javascript.js"></script>
+	<script type="text/javascript" src="/engine.js"></script>
+	<script type="text/javascript" src="/main.js"></script>
+	<script type="text/javascript" src="/renderer.js"></script>
+	<script type="text/javascript" src="/btn.js"></script>
+</body>
+</html>
