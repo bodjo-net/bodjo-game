@@ -2,3 +2,5 @@ node_modules/
 client/
 tester.js
 config.json
+scoreboard.json
+sample.js

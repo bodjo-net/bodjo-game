@@ -2,8 +2,9 @@
 <html>
 <head>
 	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="shortcut icon" type="image/png" href="favicon.png">
-	<title>bodjo/{name}</title>
+	<title></title>
 	<link rel="stylesheet" type="text/css" href="/styles.css">
 	<link href="https://fonts.googleapis.com/css?family=Roboto+Mono:400,700|Source+Code+Pro:400,700&display=swap&subset=cyrillic" rel="stylesheet">
 </head>
@@ -20,16 +21,16 @@
 			</div>
 			<div id="container">
 				<div id="docs-page" class="active">
-					docs
 				</div>
 				<div id="code-page">
 					<div id="code-wrapper">
 						<div id="code"></div>
+						<div id="errors">
+						</div>
 					</div>
 					<div id="controls"></div>
 				</div>
 				<div id="scoreboard-page">
-					scoreboard
 				</div>
 			</div>
 
@@ -41,13 +42,31 @@
 			</div>
 		</div>
 	</div>
+	<div id="new-tab-dialog" class='dialog'>
+		<h3>Oops... So many tabs.</h3>
+		<p>Bodjo game supports only one active tab.</p>
+		<p>You can reload this page to continue using this tab or close it.</p>
+		<div class='btn' onclick="window.location.reload()">RELOAD TAB</div>
+	</div>
+	<div id="missing-token-dialog" class='dialog'>
+		<h3>We lost your token :C</h3>
+		<p>We should have received your token after redirecting from main page.</p>
+		<p>Probably it expired or you haven't logined at all.</p>
+		<br>
+		<p>Sorry for such incident. Please, come back here after logging in.</p>
+		<a class='btn' href="https://bodjo.net/">GO TO MAIN PAGE</a>
+	</div>
 	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
 	<script type="text/javascript" src="/polyfills.js"></script>
 	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.3.3/ace.js"></script>
 	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.3.3/mode-javascript.js"></script>
+	<script type="text/javascript" src="/bodjo-page-loader.js"></script>
 	<script type="text/javascript" src="/engine.js"></script>
 	<script type="text/javascript" src="/main.js"></script>
 	<script type="text/javascript" src="/renderer.js"></script>
 	<script type="text/javascript" src="/btn.js"></script>
+	<script type="text/javascript">
+		loadBodjoPage('docs.games.'+GAME_NAME+'.ru', '#docs-page');
+	</script>
 </body>
 </html>

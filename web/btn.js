@@ -55,4 +55,10 @@ function obtainWithRipple(element) {
 
 	element.addEventListener('mousedown', down);
 	document.body.addEventListener('mouseup', up);
+
+	return function () {
+		element.removeEventListener('mousedown', down)
+		document.body.removeEventListener('mouseup', up);
+		up();
+	}
 }

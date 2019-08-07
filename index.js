@@ -20,6 +20,8 @@ class BodjoGame extends EventEmitter {
 
 		this.__players = {};
 		this.__gameSessionTokens = {};
+
+		this.scoreboard = new Scoreboard();
 	}
 
 	initClient(dir) {
@@ -100,16 +102,18 @@ class BodjoGame extends EventEmitter {
 			if (contentType)
 				res.setHeader('Content-Type', contentType);
 
+			let data = fs.readFileSync(path);
 			if (url == '/engine.js') {
 				res.write('window.DEV = ' + (process.argv.includes('--dev') ? 'true' : 'false') + ';\n');
 				res.write('window.GAME_NAME = \'' + bodjo.config.game + '\';\n');
 				res.write('window.GAME_SERVER = \'' + bodjo.config.name + '\';\n');
 			}
 
-			let stream = fs.createReadStream(path);
-			stream.on('open', () => stream.pipe(res));
-			stream.on('error', () => res.end());
-	
+			// let stream = fs.createReadStream(path);
+			// stream.on('open', () => stream.pipe(res));
+			// stream.on('error', () => res.end());
+			res.write(data);
+			res.end();
 		});
 		if (this.config.ssl) {
 			if (!containsKeys(this.config.ssl, ['key', 'cert'])) {
@@ -128,6 +132,10 @@ class BodjoGame extends EventEmitter {
 		io.use((socket, next) => {
 			let query = socket.handshake.query;
 
+			if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
+				return next(wsErrObj('max players', 6));
+			}
+
 			if (typeof query.role !== 'string' ||
 				typeof query.username !== 'string') {
 				return next(wsErrObj('"role" and "username" should be passed in query', 0));
@@ -139,16 +147,21 @@ class BodjoGame extends EventEmitter {
 
 				bodjo.__players[query.username].addSpectator(client);
 			} else if (query.role === 'player') {
-				if (bodjo.__players[query.username])
-					return next(wsErrObj('player has already connected', 2));
 
 				if (typeof query.token !== 'string')
 					return next(wsErrObj('gameSessionToken in query is not found (key "token")', 3));
 
 				if (!process.argv.includes('--dev') &&
-					(!bodjo.__gameSessionTokens[username] ||
-					 !bodjo.__gameSessionTokens[username].includes(query.token))) {
+					(!bodjo.__gameSessionTokens[query.username] ||
+					 !bodjo.__gameSessionTokens[query.username].includes(query.token))) {
 					return next(wsErrObj('gameSessionToken is invalid', 4));
+				}
+
+				if (bodjo.__players[query.username]) {
+					bodjo.__players[query.username].socket.emit('new-tab');
+					bodjo.__players[query.username].socket.disconnect(true);
+					delete bodjo.__players[query.username]
+					// return next(wsErrObj('player has already connected', 2));
 				}
 			} else {
 				return next(wsErrObj('role should be "spectator" or "player"', 5));
@@ -156,12 +169,6 @@ class BodjoGame extends EventEmitter {
 			return next();
 		});
 		io.on('connection', socket => {
-			if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
-				socket.emit('connect', {status: 'err', reason: 'max players'});
-				socket.close();
-				return;
-			}
-
 			let query = socket.handshake.query;
 			let role = query.role;
 			let username = query.username;
@@ -173,6 +180,8 @@ class BodjoGame extends EventEmitter {
 				bodjo.emit('player-connect', player);
 			}
 
+			socket.emit('scoreboard', bodjo.scoreboard.raw());
+
 			socket.on('disconnect', () => {
 				if (username != null && player && bodjo.__players[username]) {
 					// player.socket.close();
@@ -180,57 +189,73 @@ class BodjoGame extends EventEmitter {
 				}
 			})
 		});
-		httpServer.listen(this.config.httpPort, 'bodjo', function (error) {
+		bodjo.scoreboard.onUpdate = function () {
+			for (let username in bodjo.__players)
+				bodjo.__players[username].emit('scoreboard', bodjo.scoreboard.raw());
+		}
+		httpServer.listen(this.config.httpPort, this.config.httpHost || '0.0.0.0', function (error) {
 			if (error)
 				fatalerr(error);
 			else log('[HTTP] HTTP Server is listening at ' + (':'+bodjo.config.httpPort).yellow.bold)
 		});
 
-
-		let tcpServer = net.createServer((socket) => {
-			let authorized = false;
-			socket.on('data', function (message) {
-				if (typeof message !== 'string')
-					return;
-
-				let object = null;
-				try {
-					object = JSON.parse(message);
-				} catch (e) { return; }
-
-				if (typeof object !== 'object' ||
-					Array.isArray(object) || object == null)
-					return;
-
-				if (object.type === 'connect') {
-					if (object.name === config.name &&
-						object.secret === config.secret) {
-						socket.send(JSON.stringify({type:'connect',status:'ok'}));
-						authorized = true;
-						log("[TCP] Main server connected successfully.");
-					} else {
-						socket.send(JSON.stringify({type:'connect',status:'err'}));
-					}
-				} else if (object.type === 'new-player') {
-					if (typeof object.username !== 'string' ||
-						typeof object.token !== 'string') {
-						socket.send(JSON.stringify({type:'new-player',status:'err'}));
+		if (!process.argv.includes('--dev')) {
+			let tcpServer = net.createServer((socket) => {
+				let authorized = false;
+				socket.on('data', function (message) {
+					if (message instanceof Buffer)
+						message = message.toString();
+					if (typeof message !== 'string')
 						return;
+
+					let object = null;
+					try {
+						object = JSON.parse(message);
+					} catch (e) { return; }
+
+					if (typeof object !== 'object' ||
+						Array.isArray(object) || object == null)
+						return;
+
+					if (object.type === 'connect') {
+						if (object.name === bodjo.config.name &&
+							object.secret === bodjo.config.secret) {
+							socket.write(JSON.stringify({type:'connect',status:'ok'}));
+							authorized = true;
+							log("[TCP] Main server connected successfully.");
+						} else {
+							socket.write(JSON.stringify({type:'connect',status:'fail'}));
+						}
+					} else if (object.type === 'new-player') {
+						if (!authorized)
+							return;
+
+						if (typeof object.username !== 'string' ||
+							typeof object.token !== 'string')
+							return;
+
+						if (!bodjo.__gameSessionTokens[object.username])
+							bodjo.__gameSessionTokens[object.username] = [];
+
+						bodjo.__gameSessionTokens[object.username].push(object.token);
+						log("[TCP] Received " + object.username.cyan + "'s gameSessionToken ("+object.token.grey+")");
 					}
-
-					if (!bodjo.__gameSessionTokens[object.username])
-						bodjo.__gameSessionTokens[object.username] = [];
-
-					bodjo.__gameSessionTokens[object.username].push(object.token);
-					log("[TCP] Received " + object.username.cyan + "'s gameSessionToken ("+object.token.grey+")");
-				}
+				});
+				socket.on('error', function (error) {
+					if (authorized)
+						warn("[TCP] Main server connection error.", error);
+				})
+				socket.on('disconnect', function () {
+					if (authorized)
+						log("[TCP] Main server disconnected.");
+				});
+				socket.on('close', function () {
+					if (authorized)
+						log("[TCP] Main server disconnected.");
+				});
 			});
-			socket.on('close', function () {
-				if (authorized)
-					log("[TCP] Main server disconnected.");
-			});
-		});
-		tcpServer.listen(this.config.tcpPort);
+			tcpServer.listen(this.config.tcpPort, this.config.tcpHost || '0.0.0.0');
+		}
 	}
 }
 class Player {
@@ -259,6 +284,72 @@ class Player {
 
 	once() {
 		this.socket.once.apply(this.socket, arr(arguments));
+	}
+}
+class Scoreboard {
+	constructor(filename = "scoreboard.json") {
+		this.onUpdate = null;
+		this.sortFunction = function (a, b) {
+			if (typeof a.value === 'undefined') {
+				warn('[scoreboard] write ' + 'bodjo.scoreboard.sortFunction' + ' for sort.');
+				return 0;
+			}
+			return b.value - a.value;
+		}
+
+		try {
+			this.data = JSON.parse(fs.readFileSync('scoreboard.json').toString());
+		} catch (e) {
+			this.data = {};
+			this.save();
+			warn('[scoreboard] file not found ('+'scoreboard.json'.magenta.bold+'), creating new');
+		}
+	}
+
+	push(username, value) {
+		if (username instanceof Player)
+			username = username.username;
+		if (this.data[username] != value) {
+			this.data[username] = value;
+			if (this.onUpdate !== null)
+				this.onUpdate();
+		} else
+			this.data[username] = value;
+		this.save();
+	}
+
+	save() {
+		fs.writeFileSync('scoreboard.json', JSON.stringify(this.data));
+	}
+
+	raw() {
+		let rawdata = keys(this.data).map(username => {
+			if (typeof this.data[username] === 'object' &&
+				this.data[username] != null &&
+				!Array.isArray(this.data[username]))
+				return Object.assign(this.data[username], {username});
+			return {username, value: this.data[username]};
+		}).sort(this.sortFunction);
+		for (let i = 0, place = 1; i < rawdata.length; ++i) {
+			rawdata[i].place = place;
+			if (i+1 < rawdata.length) {
+				if (this.sortFunction(rawdata[i+1], rawdata[i]) > 0)
+					place++;
+			}
+		}
+		return rawdata;
+	}
+
+	get(username) {
+		if (username instanceof Player)
+			username = username.username;
+		return this.data[username];
+	}
+
+	clear() {
+		log('[scoreboard] scoreaboard cleared');
+		this.data = {};
+		this.save();
 	}
 }
 module.exports = BodjoGame;

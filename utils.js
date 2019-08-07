@@ -22,14 +22,20 @@ global.randomString = function (n = 16) {
 }
 
 global.promptConfig = async function (filename) {
-
 	let inputs = {
 		game: {s: "["+"?".green.bold+"] "+"Game name: ".bold, r: /^[\w\d-]+$/},
 		name: {s: "["+"?".green.bold+"] "+"Server name: ".bold, r: /^[\w\d-]+$/},
 		secret: {s: "["+"🔑".yellow.bold+"] "+"Server secret: ".bold, r: /^[\w\d-]+$/},
 		maxPlayers: {s: "["+"p".red.bold+"] "+"Max players: (16) ".bold, r: /^\d+$/, def: 16},
 		httpPort: {s: "["+":".white.bold+"] HTTP Server port: (80) ".bold, r: /^\d+$/, def: 80},
-		tcpPort: {s: "["+":".white.bold+"] TCP Server port: (3221) ".bold, r: /^\d+$/, def: 3221}
+		tcpPort: {s: "["+":".white.bold+"] TCP Server port: (3221) ".bold, r: /^\d+$/, def: 3221}/*,
+		color: {
+			s: "Available colors: ".white.bold+
+					keys(colors).join(', ')
+				+"\n["+"🌈".magenta.bold+"] Color: (blue-gray) ".bold, 
+			r: new RegExp('^'+keys(colors).join('$|^')+'$'), 
+			def: 'blue-gray'
+		}*/
 	};
 
 	let config = tryReadConfig(filename);
@@ -89,6 +95,15 @@ function tryReadConfig(configFilename) {
 	} catch (e) {
 		return {};
 	}
+}
+global.parseColor = function (hex) {
+	if (hex[0] == '#')
+		hex = hex.substring(1);
+	return [
+		parseInt(hex.substring(0, 2), 16),
+		parseInt(hex.substring(2, 4), 16),
+		parseInt(hex.substring(4, 6), 16)
+	];
 }
 
 global.GET = function (URL) {

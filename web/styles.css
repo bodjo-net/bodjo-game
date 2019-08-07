@@ -41,6 +41,10 @@ html, head, body {
 	box-sizing: border-box;
 	background: #FFFFFF;
 }
+#scoreboard-page table {
+	width: 100%;
+	text-align: center;
+}
 #game #canvas-container {
 	position: relative;
 	width: 100%;
@@ -61,7 +65,7 @@ html, head, body {
 	z-index: 100500;
 }
 #workspace #bar {
-	background: #FFE0B2;
+	background: #CFD8DC;
 	user-select: none;
 	-ms-user-select: none;
 	-moz-user-select: none;
@@ -117,6 +121,9 @@ html, head, body {
 	right: 0;
 	bottom: 0;
 	display: none;
+	box-sizing: border-box;
+	overflow: auto;
+	padding: 10px;
 }
 #container > *.active {
 	display: block;
@@ -126,9 +133,11 @@ html, head, body {
 	top: 0;
 	left: 0;
 	right: 0;
+	z-index: 2;
 }
 #code {
 	height: 100%;
+	padding: 0;
 }
 .ace_warning {
     background-image: none !important;
@@ -138,14 +147,121 @@ html, head, body {
     background-image: none !important;
     background-color: rgba(250,50,50,0.7);
 }
+#errors {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 100500;
+}
+#errors .error,
+#errors .notification {
+	cursor: pointer;
+	position: relative;
+	display: block;
+	padding: 8px;
+	opacity: 1;
+	margin-top: 0;
+	max-height: 100vh;
+	font-size: 12px;
+	transition: max-height 0.2s ease-in-out,
+				opacity 0.2s ease-in-out;
 
+	user-select: none;
+	-ms-user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+	padding-right: 30px;
+}
+#errors .error {
+	background: rgba(200, 0, 0, 0.4);
+}
+#errors .notification {
+	background: rgba(200, 180, 0, 0.4);
+}
+#errors .error .ripple,
+#errors .notification .ripple {
+	background: rgba(255, 255, 255, 0.1);
+}
+#errors .error.hide,
+#errors .notification.hide {
+	max-height: 0;
+	opacity: 0;
+}
+#errors .error .loader,
+#errors .notification .loader {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 3px;
+	width: 0;
+	background: rgba(255, 240, 240, 0.8);
+	animation: errorLoading 5s linear;
+	animation-fill-mode: forwards;
+	cursor: pointer;
+	transition: height 0.1s ease-in-out;
+}
+#errors .error.stopped,
+#errors .notification.stopped {
+	cursor: inherit !important;
+	user-select: text !important;
+	-ms-user-select: text !important;
+	-moz-user-select: text !important;
+	-webkit-user-select: text !important;
+}
+#errors .error.stopped .loader,
+#errors .notification.stopped .loader {
+	height: 0;
+}
+@keyframes errorLoading {
+	0% {width: 0;}
+	100% {width: 100%;}
+}
+@keyframes fadeIn {
+	0% {opacity: 0;}
+	100% {opacity: 0.4;}
+}
+#errors .error .close,
+#errors .notification .close {
+	cursor: pointer;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    padding: 8px;
+    width: 15px;
+    height: 15px;
+	animation: fadeIn 0.2s ease-in-out;
+	animation-fill-mode: forwards;
+}
+#errors .error .close span:nth-child(1),
+#errors .notification .close span:nth-child(1) {
+    position: absolute;
+    top: 14px;
+    left: 8px;
+    width: 14px;
+    height: 2px;
+    background: #000000;
+    display: inline-block;
+    transform: rotate(45deg);
+}
+#errors .error .close span:nth-child(2),
+#errors .notification .close span:nth-child(2) {
+    position: absolute;
+    top: 14px;
+    left: 8px;
+    width: 14px;
+    height: 2px;
+    background: #000000;
+    display: inline-block;
+    transform: rotate(-45deg);
+}
 #controls {
 	position: absolute;
 	bottom: 0;
 	left: 0;
 	right: 0;
 	z-index: 5;
-	background: #FFE0B2;
+	background: #CFD8DC;
 	padding: 8px 0 0 8px;
 	box-shadow: 0 -1px 3px rgba(0,0,0,0.1);
 }
@@ -213,16 +329,6 @@ html, head, body {
 #controls .Button .ripple {
 	background: rgba(0,0,0,0.1);
 }
-
-
-
-
-
-
-
-
-
-
 input[type=range] {
   -webkit-appearance: none;
   height: 100%;
@@ -237,7 +343,7 @@ input[type=range]::-webkit-slider-runnable-track {
   border-radius: 2px;
   cursor: pointer;
   animate: 0.2s;
-  background: #FF9800;
+  background: #78909C;
   border-radius: 1.3px;
   border: 0.2px solid #010101;
 }
@@ -245,26 +351,107 @@ input[type=range]::-webkit-slider-thumb {
   height: 10px;
   width: 10px;
   border-radius: 50%;
-  background: #FF9800;
+  background: #78909C;
   cursor: pointer;
   -webkit-appearance: none;
   margin-top: -4px;
 }
 input[type=range]:focus::-webkit-slider-runnable-track {
-  background: #FF9800;
+  background: #78909C;
 }
 input[type=range]::-moz-range-track {
   width: 100%;
   height: 3px;
 	border-radius: 1px;
   cursor: pointer;
-  background: #FF9800;
+  background: #78909C;
 }
 input[type=range]::-moz-range-thumb {
   height: 10px;
   width: 10px;
 	border: none;
   border-radius: 50%;
-  background: #FF9800;
+  background: #78909C;
   cursor: pointer;
+}
+.ace-tm .ace_gutter {
+	background: rgba(207,216,220,0.5) !important;
+}
+.ace-tm .ace_gutter-active-line {
+	background: rgba(207,216,220,0.75) !important;
+}
+.bodjo-error {
+	background: rgba(255,50,50,0.5);
+    position: absolute;
+    width: 100% !important;
+    left: 0 !important;
+}
+.tab.not-saved {
+    background: rgba(255,245,175,1) !important;
+}
+.bodjo-player {
+    display: inline-block;
+}
+.bodjo-player.loading span.image {
+    background-color: rgba(0, 0, 0, .1);
+    animation: loadingblink infinite ease-in-out 1s;
+}
+.bodjo-player span.image {
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    background-size: contain;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+.bodjo-player span.username {
+    vertical-align: middle;
+    margin-left: 5px;
+}
+@keyframes loadingblink {
+    0% {
+        background: rgba(0, 0, 0, .025)
+    }
+
+    50% {
+        background: rgba(0, 0, 0, .075)
+    }
+
+    100% {
+        background: rgba(0, 0, 0, .025)
+    }
+}
+.dialog {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: #FAFAFA;
+	color: #000000;
+	text-align: center;
+	padding-top: 10%;
+	display: none;
+	z-index: 100500;
+}
+.dialog p {
+	margin: 0;
+}
+.dialog .btn {
+	padding: 6px 10px;
+	border-radius: 2px;
+	margin: 2px;
+	margin-top: 20px;
+	display: inline-block;
+	user-select: none;
+	-ms-user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+	cursor: pointer;
+	color: #0277BD;
+	text-decoration: none;
+}
+.dialog .btn .ripple {
+	background-color: rgba(0,0,0,0.2);
 }
