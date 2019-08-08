@@ -50,7 +50,7 @@ class BodjoGame extends EventEmitter {
 			return;
 		}
 
-		this.__serverURL = await GET("https://bodjo.net/SERVER_IP");
+		this.__serverURL = await GET("https://bodjo.net/SERVER_HOST");
 		log('Got main server IP: ' + this.__serverURL.bold);
 
 		const webdir = __dirname + '/web';

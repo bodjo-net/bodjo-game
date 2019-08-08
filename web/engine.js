@@ -381,9 +381,9 @@ function clearSelection() {
 
 let socket;
 window.addEventListener('load', function () {
-	GET('https://bodjo.net/SERVER_IP', (status, hostname) => {
+	GET('https://bodjo.net/SERVER_HOST', (status, hostname) => {
 		if (status)
-			SERVER_IP = hostname;
+			SERVER_HOST = hostname;
 		getCredentials(credentials => socket = connect(credentials));
 		loaded = true;
 		loadCode();
@@ -391,7 +391,7 @@ window.addEventListener('load', function () {
 });
 
 let TOKEN = bodjo.storage.get('bodjo-token');
-let SERVER_IP = null;
+let SERVER_HOST = null;
 
 // code saver
 let codeChanged = false;
@@ -438,7 +438,7 @@ function saveCode(uploadToMainServer) {
 	localStorage.setItem('bodjo-code-'+GAME_NAME, JSON.stringify(bodjo.editor.getValue()));
 
 	if (uploadToMainServer) {
-		POST(SERVER_IP + '/code/save?game=' + GAME_NAME + '&token=' + TOKEN, req => {
+		POST(SERVER_HOST + '/code/save?game=' + GAME_NAME + '&token=' + TOKEN, req => {
 			req.setRequestHeader("Content-Type", "plain/text");
 			req.send(bodjo.editor.getValue());
 		}, (status, data) => {
@@ -460,7 +460,7 @@ function loadCode() {
 	let localCodeTime = bodjo.storage.get('bodjo-code-time-'+GAME_NAME);
 	let localCode = JSON.parse(localStorage.getItem('bodjo-code-'+GAME_NAME));
 	let selection = bodjo.storage.get('bodjo-code-selection-'+GAME_NAME);
-	GET(SERVER_IP + '/code/date?game=' + GAME_NAME + '&token=' + TOKEN, (status, data) => {
+	GET(SERVER_HOST + '/code/date?game=' + GAME_NAME + '&token=' + TOKEN, (status, data) => {
 		if (status) {
 			let serverCodeTime = data.result || 0;
 			if (data.status !== 'ok') {
@@ -493,7 +493,7 @@ function loadCode() {
 					console.log('code loaded from localStorage');
 
 				} else {
-					GET(SERVER_IP + '/code/load?game=' + GAME_NAME + '&token=' + TOKEN, (status, data) => {
+					GET(SERVER_HOST + '/code/load?game=' + GAME_NAME + '&token=' + TOKEN, (status, data) => {
 						if (status && data.status === 'ok') {
 							bodjo.storage.set('bodjo-code-time', data.date);
 							localStorage.setItem('bodjo-code-'+GAME_NAME, JSON.stringify(data.content));
@@ -555,7 +555,7 @@ function getCredentials(cb) {
 				return;
 			}
 
-			GET(SERVER_IP + '/games/join?name=' + GAME_SERVER + '&token=' + TOKEN, (status, data) => {
+			GET(SERVER_HOST + '/games/join?name=' + GAME_SERVER + '&token=' + TOKEN, (status, data) => {
 				if (!status) {
 					console.warn("/games/join/: bad http response " + data.statusCode + ": " + data.statusText);
 					return;
@@ -773,7 +773,7 @@ function Player(username) {
 	setTimeout(function () {
 		if (wasLastPlayerAdded == lastPlayerAdded && Object.keys(playersToLoad).length > 0) {
 			// load [playersToLoad]
-			GET(SERVER_IP+'/account/info?usernames=' + Object.keys(playersToLoad).join(','), (status, data) => {
+			GET(SERVER_HOST+'/account/info?usernames=' + Object.keys(playersToLoad).join(','), (status, data) => {
 				if (status && data.status === 'ok') {
 					let usernames = Object.keys(data.result)
 					for (let i = 0; i < usernames.length; ++i) {
