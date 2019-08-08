@@ -200,9 +200,78 @@ class BodjoGame extends EventEmitter {
 		});
 
 		if (!process.argv.includes('--dev')) {
-			let tcpServer = net.createServer((socket) => {
+			// let tcpServer = net.createServer((socket) => {
+			// 	let authorized = false;
+			// 	socket.on('data', function (message) {
+			// 		if (message instanceof Buffer)
+			// 			message = message.toString();
+			// 		if (typeof message !== 'string')
+			// 			return;
+
+			// 		let object = null;
+			// 		try {
+			// 			object = JSON.parse(message);
+			// 		} catch (e) { return; }
+
+			// 		if (typeof object !== 'object' ||
+			// 			Array.isArray(object) || object == null)
+			// 			return;
+
+			// 		if (object.type === 'connect') {
+			// 			if (object.name === bodjo.config.name &&
+			// 				object.secret === bodjo.config.secret) {
+			// 				socket.write(JSON.stringify({type:'connect',status:'ok'}));
+			// 				authorized = true;
+			// 				log("[TCP] Main server connected successfully.");
+			// 			} else {
+			// 				socket.write(JSON.stringify({type:'connect',status:'fail'}));
+			// 			}
+			// 		} else if (object.type === 'new-player') {
+			// 			if (!authorized)
+			// 				return;
+
+			// 			if (typeof object.username !== 'string' ||
+			// 				typeof object.token !== 'string')
+			// 				return;
+
+			// 			if (!bodjo.__gameSessionTokens[object.username])
+			// 				bodjo.__gameSessionTokens[object.username] = [];
+
+			// 			bodjo.__gameSessionTokens[object.username].push(object.token);
+			// 			log("[TCP] Received " + object.username.cyan + "'s gameSessionToken ("+object.token.grey+")");
+			// 		}
+			// 	});
+			// 	socket.on('error', function (error) {
+			// 		if (authorized)
+			// 			warn("[TCP] Main server connection error.", error);
+			// 	})
+			// 	socket.on('disconnect', function () {
+			// 		if (authorized)
+			// 			log("[TCP] Main server disconnected.");
+			// 	});
+			// 	socket.on('close', function () {
+			// 		if (authorized)
+			// 			log("[TCP] Main server disconnected.");
+			// 	});
+			// });
+			// tcpServer.listen(this.config.tcpPort, this.config.tcpHost || '0.0.0.0');
+
+			let hostname = bodjo.__serverURL;
+			hostname = hostname.replace(/https{0,1}\:\/\/|\:\d+|\n/g, '');
+
+			let tcpClient = null;
+			function connectTCP() {
 				let authorized = false;
-				socket.on('data', function (message) {
+				log("[TCP] Trying to connect to main server... (" + (hostname + ":3221").grey+")");
+				tcpClient = net.connect(3221, hostname, function () {
+					log("[TCP] Connected to main server.");
+					tcpClient.write(JSON.stringify({
+						type: 'connect',
+						name: bodjo.config.name,
+						secret: bodjo.config.secret
+					}));
+				});
+				tcpClient.on('data', function (message) {
 					if (message instanceof Buffer)
 						message = message.toString();
 					if (typeof message !== 'string')
@@ -213,23 +282,14 @@ class BodjoGame extends EventEmitter {
 						object = JSON.parse(message);
 					} catch (e) { return; }
 
-					if (typeof object !== 'object' ||
-						Array.isArray(object) || object == null)
-						return;
-
 					if (object.type === 'connect') {
-						if (object.name === bodjo.config.name &&
-							object.secret === bodjo.config.secret) {
-							socket.write(JSON.stringify({type:'connect',status:'ok'}));
+						if (object.status === 'ok') {
 							authorized = true;
-							log("[TCP] Main server connected successfully.");
+							log("[TCP] Authorized", 'successfully'.green.bold + ".");
 						} else {
-							socket.write(JSON.stringify({type:'connect',status:'fail'}));
+							warn("[TCP] " + 'Failed'.red.bold + " to authorize.");
 						}
-					} else if (object.type === 'new-player') {
-						if (!authorized)
-							return;
-
+					} else if (object.type === 'new-player' && authorized) {
 						if (typeof object.username !== 'string' ||
 							typeof object.token !== 'string')
 							return;
@@ -238,23 +298,19 @@ class BodjoGame extends EventEmitter {
 							bodjo.__gameSessionTokens[object.username] = [];
 
 						bodjo.__gameSessionTokens[object.username].push(object.token);
-						log("[TCP] Received " + object.username.cyan + "'s gameSessionToken ("+object.token.grey+")");
+
+						log("[TCP] Received " + object.username.cyan.bold + "'s gameSessionToken (" + object.token.grey + ")");
 					}
 				});
-				socket.on('error', function (error) {
-					if (authorized)
-						warn("[TCP] Main server connection error.", error);
-				})
-				socket.on('disconnect', function () {
-					if (authorized)
-						log("[TCP] Main server disconnected.");
+				tcpClient.on('error', function (error) {
+					warn("[TCP] Error.", error);
 				});
-				socket.on('close', function () {
-					if (authorized)
-						log("[TCP] Main server disconnected.");
+				tcpClient.on('close', function () {
+					log("[TCP] Disconnected. Trying to connect again...")
+					setTimeout(connectTCP, 2500);
 				});
-			});
-			tcpServer.listen(this.config.tcpPort, this.config.tcpHost || '0.0.0.0');
+			}
+			connectTCP();
 		}
 	}
 }

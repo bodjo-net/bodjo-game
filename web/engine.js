@@ -540,7 +540,7 @@ function getCredentials(cb) {
 		} else {
 			let gameToken = bodjo.storage.get('bodjo-game-token-'+GAME_SERVER);
 			let username = bodjo.storage.get('bodjo-username');
-			if (gameToken && username) {
+			if (!!gameToken && !!username) {
 				credentials.username = username;
 				credentials.token = gameToken;
 				credentials.probable = true;
