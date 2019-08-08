@@ -25,11 +25,17 @@ class Bodjo extends EventEmitter {
 		this.__controls = null;
 		this.storage = {
 			get: function (name) {
+				let o = null;
 				if (localStorage.getItem(name))
-					return JSON.parse(localStorage.getItem(name));
-				if (getCookie(name))
-					return JSON.parse(getCookie(name));
-				return null;
+					o = localStorage.getItem(name);
+				else if (getCookie(name))
+					o = getCookie(name);
+				if (o != null) {
+					try {
+						o = JSON.parse(o)
+					} catch (e) {}
+				}
+				return o;
 			},
 			set: function (name, value) {
 				localStorage.setItem(name, JSON.stringify(value));
@@ -439,7 +445,7 @@ function saveCode(uploadToMainServer) {
 
 	if (uploadToMainServer) {
 		POST(SERVER_HOST + '/code/save?game=' + GAME_NAME + '&token=' + TOKEN, req => {
-			req.setRequestHeader("Content-Type", "plain/text");
+			// req.setRequestHeader("Content-Type", "plain/text");
 			req.send(bodjo.editor.getValue());
 		}, (status, data) => {
 			if (status && data.status == 'ok') {
