@@ -37,8 +37,17 @@ global.promptConfig = async function (filename) {
 			def: 'blue-gray'
 		}*/
 	};
+	if (process.argv.includes('--dev')) {
+		delete inputs.name;
+		delete inputs.secret;
+	}
 
 	let config = tryReadConfig(filename);
+	if (typeof config !== 'object' || config == null || Array.isArray(config))
+		config = {};
+	try {
+		config.game = fs.readFileSync('game-name').toString();
+	} catch (e) {}
 	if (!config || !containsKeys(config, keys(inputs))) {
 
 		let rl = readline.createInterface({
@@ -58,9 +67,9 @@ global.promptConfig = async function (filename) {
 
 		console.log("To obtain your server with SSL certificate, stop process and edit " + filename.magenta + " file.\nAdd "+"\"ssl\"".white.bold+" object with " + "\"key\"".white.bold + " & " + "\"cert\"".white.bold+" keys, that lead to files with certificate.\n");
 		fs.writeFileSync(filename, JSON.stringify(config, null, '\t'));
+		fs.writeFileSync("game-name", config.game);
 
 		rl.close();
-		
 	}
 
 

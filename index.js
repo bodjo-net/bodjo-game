@@ -69,6 +69,9 @@ class BodjoGame extends EventEmitter {
 				res.end();
 				return;
 			}
+			let origin = req.headers['origin'];
+			if (origin && ['http://bodjo:3000','http://bodjo.net','https://bodjo.net','http://localhost:3000','http://localhost','http://bodjo'].includes(origin))
+				res.setHeader('Access-Control-Allow-Origin', origin);
 
 			if (url === '/status') {
 				res.writeHead(200, {'Content-Type': 'application/json'});
@@ -261,6 +264,7 @@ class BodjoGame extends EventEmitter {
 
 			let tcpClient = null;
 			function connectTCP() {
+				let interval = null;
 				let authorized = false;
 				log("[TCP] Trying to connect to main server... (" + (hostname + ":3221").grey+")");
 				tcpClient = net.connect(3221, hostname, function () {
@@ -270,11 +274,17 @@ class BodjoGame extends EventEmitter {
 						name: bodjo.config.name,
 						secret: bodjo.config.secret
 					}));
+					interval = setInterval(function () {
+						tcpClient.write('ping');
+					}, 10000);
 				});
 				tcpClient.on('data', function (message) {
 					if (message instanceof Buffer)
 						message = message.toString();
 					if (typeof message !== 'string')
+						return;
+
+					if (message == 'pong')
 						return;
 
 					let object = null;
@@ -306,7 +316,9 @@ class BodjoGame extends EventEmitter {
 					warn("[TCP] Error.", error);
 				});
 				tcpClient.on('close', function () {
-					log("[TCP] Disconnected. Trying to connect again...")
+					log("[TCP] Disconnected. Trying to connect again...");
+					if (interval != null)
+						clearInterval(interval);
 					setTimeout(connectTCP, 2500);
 				});
 			}

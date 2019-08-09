@@ -26,10 +26,14 @@ class Bodjo extends EventEmitter {
 		this.storage = {
 			get: function (name) {
 				let o = null;
-				if (localStorage.getItem(name))
+				if (localStorage.getItem(name)) {
 					o = localStorage.getItem(name);
-				else if (getCookie(name))
+					if (typeof getCookie(name) === 'undefined')
+						setCookie(name, o) 
+				} else if (getCookie(name)) {
 					o = getCookie(name);
+					localStorage.setItem(name, o);
+				}
 				if (o != null) {
 					try {
 						o = JSON.parse(o)
@@ -45,6 +49,7 @@ class Bodjo extends EventEmitter {
 	}
 	render() {
 		let args = arr(arguments);
+		if (args.length == 0) return;
 		if (args.length > 0)
 			this.__renderArguments = args;
 		this.emit.apply(bodjo, ['render'].concat(this.__renderArguments));
@@ -393,6 +398,8 @@ window.addEventListener('load', function () {
 		getCredentials(credentials => socket = connect(credentials));
 		loaded = true;
 		loadCode();
+
+		bodjo.render();
 	});
 });
 
@@ -435,15 +442,13 @@ function saveCode(uploadToMainServer) {
 	if (typeof uploadToMainServer === 'undefined')
 		uploadToMainServer = true;
 
-	if (!codeChanged)
-		return;
-
 	changeCodeChange(false)
 	bodjo.storage.set('bodjo-code-time-'+GAME_NAME, Date.now());
 	bodjo.storage.set('bodjo-code-selection-'+GAME_NAME, bodjo.editor.selection.toJSON());
+	bodjo.storage.get('bodjo-code-username-'+GAME_NAME, bodjo.storage.get('bodjo-username'));
 	localStorage.setItem('bodjo-code-'+GAME_NAME, JSON.stringify(bodjo.editor.getValue()));
 
-	if (uploadToMainServer) {
+	if (uploadToMainServer && !codeChanged) {
 		POST(SERVER_HOST + '/code/save?game=' + GAME_NAME + '&token=' + TOKEN, req => {
 			// req.setRequestHeader("Content-Type", "plain/text");
 			req.send(bodjo.editor.getValue());
@@ -463,7 +468,9 @@ function saveCode(uploadToMainServer) {
 }
 
 function loadCode() {
+	let currentUsername = bodjo.storage.get('bodjo-username');
 	let localCodeTime = bodjo.storage.get('bodjo-code-time-'+GAME_NAME);
+	let localCodeUsername = bodjo.storage.get('bodjo-code-username-'+GAME_NAME);
 	let localCode = JSON.parse(localStorage.getItem('bodjo-code-'+GAME_NAME));
 	let selection = bodjo.storage.get('bodjo-code-selection-'+GAME_NAME);
 	GET(SERVER_HOST + '/code/date?game=' + GAME_NAME + '&token=' + TOKEN, (status, data) => {
@@ -471,7 +478,8 @@ function loadCode() {
 			let serverCodeTime = data.result || 0;
 			if (data.status !== 'ok') {
 				if (typeof localCodeTime === 'number' &&
-					typeof localCode === 'string') {
+					typeof localCode === 'string' &&
+					currentUsername == localCodeUsername) {
 					bodjo.editor.setValue(localCode, 1);
 					if (selection)
 						bodjo.editor.selection.fromJSON(selection);
@@ -489,13 +497,14 @@ function loadCode() {
 			} else {
 				if (typeof localCodeTime === 'number' &&
 					typeof localCode === 'string' &&
-					Math.round(localCodeTime / 1000) >= Math.round(serverCodeTime / 1000)) {
+					Math.round(localCodeTime / 1000) >= Math.round(serverCodeTime / 1000) &&
+					currentUsername == localCodeUsername) {
 
 					bodjo.editor.setValue(localCode, 1);
 					if (selection)
 						bodjo.editor.selection.fromJSON(selection);
-					changeCodeChange(false);
 					saveCode(false);
+					changeCodeChange(false);
 					console.log('code loaded from localStorage');
 
 				} else {
@@ -505,6 +514,7 @@ function loadCode() {
 							localStorage.setItem('bodjo-code-'+GAME_NAME, JSON.stringify(data.content));
 
 							bodjo.editor.setValue(data.content, 1);
+							saveCode(false);
 							changeCodeChange(false);
 							if (selection)
 								bodjo.editor.selection.fromJSON(selection);
@@ -783,6 +793,8 @@ function Player(username) {
 				if (status && data.status === 'ok') {
 					let usernames = Object.keys(data.result)
 					for (let i = 0; i < usernames.length; ++i) {
+						playersData[usernames[i]] = data.result[usernames[i]];
+
 						let playerElement = document.querySelector('#'+playersToLoad[usernames[i]]);
 						playerElement.querySelector('span.image').style.backgroundImage = "url('"+data.result[usernames[i]].image[64]+"')";
 						playerElement.className = 'bodjo-player';
@@ -791,7 +803,7 @@ function Player(username) {
 				}
 			})
 		}
-	}, 50);
+	}, 100);
 
 	return "<div class='bodjo-player loading' id='"+id+"'><span class='image'></span><span class='username'>"+username+"</span></div>";
 }
