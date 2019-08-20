@@ -18,6 +18,8 @@ let ctx = window.ctx = canvas.getContext('2d');
 let errorsContainer = workspace.querySelector('#errors');
 let controlsContainer = workspace.querySelector('#controls');
 
+const domain = 'bodjo';
+
 class Bodjo extends EventEmitter {
 	constructor() {
 		super();
@@ -26,13 +28,13 @@ class Bodjo extends EventEmitter {
 		this.storage = {
 			get: function (name) {
 				let o = null;
-				if (localStorage.getItem(name)) {
-					o = localStorage.getItem(name);
-					if (typeof getCookie(name) === 'undefined')
-						setCookie(name, o) 
-				} else if (getCookie(name)) {
+				if (getCookie(name)) {
 					o = getCookie(name);
-					localStorage.setItem(name, o);
+					if (typeof localStorage.getItem(name) === 'undefined')
+						localStorage.setItem(name, o);
+				} else if (localStorage.getItem(name)) {
+					o = localStorage.getItem(name);
+					setCookie(name, o, {domain});
 				}
 				if (o != null) {
 					try {
@@ -43,15 +45,16 @@ class Bodjo extends EventEmitter {
 			},
 			set: function (name, value) {
 				localStorage.setItem(name, JSON.stringify(value));
-				setCookie(name, JSON.stringify(value), {domain: 'bodjo.net'});
+				setCookie(name, JSON.stringify(value), {domain});
 			}
 		}
 	}
 	render() {
 		let args = arr(arguments);
-		if (args.length == 0) return;
 		if (args.length > 0)
 			this.__renderArguments = args;
+		if (this.__renderArguments.length == 0)
+			return;
 		this.emit.apply(bodjo, ['render'].concat(this.__renderArguments));
 	}
 
@@ -780,6 +783,8 @@ let playersToLoad = {};
 let lastPlayerAdded = -1;
 function Player(username) {
 	if (playersData[username]) {
+		if (playersData[username] == null)
+			return "<div class='bodjo-player'><span class='image'></span><span class='username'>"+username+"</span></div>";
 		return "<div class='bodjo-player'><span class='image' style=\"background-image:url('"+playersData[username].image[64]+"');\"></span><span class='username'>"+username+"</span></div>";
 	}
 

@@ -1,10 +1,11 @@
 require('colors');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const socketio = require('socket.io');
 const net = require('net');
 const mime = require('mime');
-const crypto = require('crypto');
+// const crypto = require('crypto');
 const EventEmitter = require('events');
 
 require('./logger.js');
@@ -20,8 +21,6 @@ class BodjoGame extends EventEmitter {
 
 		this.__players = {};
 		this.__gameSessionTokens = {};
-
-		this.scoreboard = new Scoreboard();
 	}
 
 	initClient(dir) {
@@ -44,17 +43,18 @@ class BodjoGame extends EventEmitter {
 		let bodjo = this;
 		if (this.config instanceof Promise)
 			this.config = await this.config;
-
+		
 		if (this.__jsFilesDir == null) {
 			err('.start(): You should execute .initClient() first. Make sure it has set up client directory correctly.');
 			return;
 		}
+		bodjo.scoreboard = new Scoreboard();
 
 		this.__serverURL = await GET("https://bodjo.net/SERVER_HOST");
 		log('Got main server IP: ' + this.__serverURL.bold);
 
 		const webdir = __dirname + '/web';
-		let httpServer = http.createServer((req, res) => {
+		function onHTTPRequest(req, res) {
 			let uri = req.url;
 			let url = uri;
 			if (url.indexOf('?') >= 0)
@@ -70,7 +70,7 @@ class BodjoGame extends EventEmitter {
 				return;
 			}
 			let origin = req.headers['origin'];
-			if (origin && ['http://bodjo:3000','http://bodjo.net','https://bodjo.net','http://localhost:3000','http://localhost','http://bodjo'].includes(origin))
+			if (origin && ['http://bodjo:3000','http://bodjo.net','https://bodjo.net','http://localhost:3000','http://localhost','http://bodjo','http://77.120.70.136'].includes(origin))
 				res.setHeader('Access-Control-Allow-Origin', origin);
 
 			if (url === '/status') {
@@ -117,20 +117,22 @@ class BodjoGame extends EventEmitter {
 			// stream.on('error', () => res.end());
 			res.write(data);
 			res.end();
-		});
+		}
+		let httpServer;
 		if (this.config.ssl) {
 			if (!containsKeys(this.config.ssl, ['key', 'cert'])) {
+				httpServer = http.createServer(onHTTPRequest);
 				warn(`.start(): SSL options in config file should contain two keys: ${`"key"`.white.bold}, ${`"cert"`.white.bold}.`);
 			} else {
-				let key = fs.readFileSync(this.config.ssl.key).toString();
-				let cert = fs.readFileSync(this.config.ssl.cert).toString();
+				let key = fs.readFileSync(this.config.ssl.key);
+				let cert = fs.readFileSync(this.config.ssl.cert);
 
-				let credentials = crypto.createCredentials({key, cert});
-				httpServer.addSecure(credentials);
-
+				httpServer = https.createServer({key, cert}, onHTTPRequest);
 				log("[HTTP] SSL credentials obtained.");
 			}
-		}
+		} else
+			httpServer = http.createServer(onHTTPRequest);
+
 		let io = socketio(httpServer);
 		io.use((socket, next) => {
 			let query = socket.handshake.query;
