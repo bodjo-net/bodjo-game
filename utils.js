@@ -28,6 +28,7 @@ global.promptConfig = async function (filename) {
 		secret: {s: "["+"🔑".yellow.bold+"] "+"Server secret: ".bold, r: /^[\w\d-]+$/},
 		maxPlayers: {s: "["+"p".red.bold+"] "+"Max players: (16) ".bold, r: /^\d+$/, def: 16},
 		httpPort: {s: "["+":".white.bold+"] HTTP Server port: (80) ".bold, r: /^\d+$/, def: 80},
+		httpsPort: {s: "["+":".white.bold+"] HTTPS Server (API) port: (441) ".bold, r: /^\d+$/, def: 441},
 		tcpPort: {s: "["+":".white.bold+"] TCP Server port: (3221) ".bold, r: /^\d+$/, def: 3221}/*,
 		color: {
 			s: "Available colors: ".white.bold+
@@ -40,6 +41,7 @@ global.promptConfig = async function (filename) {
 	if (process.argv.includes('--dev')) {
 		delete inputs.name;
 		delete inputs.secret;
+		delete inputs.httpsPort;
 	}
 
 	let config = tryReadConfig(filename);

@@ -19,8 +19,15 @@ class BodjoGame extends EventEmitter {
 		this.__serverURL = null;
 		this.config = config;
 
+		this._io = null;
+
+		this.__availableIDs = Array.from({length: 255}, (x, i) => i);
+		this.__playersIDs = {};
 		this.__players = {};
+		this.__spectators = [];
 		this.__gameSessionTokens = {};
+		
+		this.scoreboard = new Scoreboard(this);
 	}
 
 	initClient(dir) {
@@ -39,21 +46,26 @@ class BodjoGame extends EventEmitter {
 
 		this.__jsFilesDir = dir;
 	}
+	broadcast() {
+		if (this._io) {
+			this._io.emit.apply(this._io, Array.prototype.slice.apply(arguments));
+		}
+	}
 	async start() {
 		let bodjo = this;
 		if (this.config instanceof Promise)
 			this.config = await this.config;
-		
+
 		if (this.__jsFilesDir == null) {
 			err('.start(): You should execute .initClient() first. Make sure it has set up client directory correctly.');
 			return;
 		}
-		bodjo.scoreboard = new Scoreboard();
 
 		this.__serverURL = await GET("https://bodjo.net/SERVER_HOST");
 		log('Got main server IP: ' + this.__serverURL.bold);
 
 		const webdir = __dirname + '/web';
+		let cache = {};
 		function onHTTPRequest(req, res) {
 			let uri = req.url;
 			let url = uri;
@@ -62,6 +74,10 @@ class BodjoGame extends EventEmitter {
 
 			if (url == '/')
 				url = '/index.html';
+			else if (url == '/spectate' || url == '/spectate/')
+				url = '/spectate/index.html';
+			else if (url == '/admin' || url == '/admin/')
+				url = '/admin/index.html';
 
 			let dirs = url.split('/');
 			if (dirs.indexOf('..') >= 0) {
@@ -90,10 +106,10 @@ class BodjoGame extends EventEmitter {
 			}
 
 			let path = null;
-			if (fs.existsSync(webdir + url)) {
+			if (fs.existsSync(bodjo.__jsFilesDir + url)) {
+				path = bodjo.__jsFilesDir + url;
+			} else if (fs.existsSync(webdir + url)) {
 				path = webdir + url;
-			} else if (fs.existsSync(this.__jsFilesDir + url)) {
-				path = this.__jsFilesDir + url;
 			} else {
 				res.statusCode = 404;
 				res.end();
@@ -105,54 +121,55 @@ class BodjoGame extends EventEmitter {
 			if (contentType)
 				res.setHeader('Content-Type', contentType);
 
-			let data = fs.readFileSync(path);
-			if (url == '/engine.js') {
+			if (url == '/engine.js' ||
+				url == '/spectate/engine.js') {
 				res.write('window.DEV = ' + (process.argv.includes('--dev') ? 'true' : 'false') + ';\n');
 				res.write('window.GAME_NAME = \'' + bodjo.config.game + '\';\n');
 				res.write('window.GAME_SERVER = \'' + bodjo.config.name + '\';\n');
 			}
 
-			// let stream = fs.createReadStream(path);
-			// stream.on('open', () => stream.pipe(res));
-			// stream.on('error', () => res.end());
-			res.write(data);
-			res.end();
+			if (!process.argv.includes('--dev')) {
+				if (typeof cache[url] === 'undefined')
+					cache[url] = fs.readFileSync(path);
+				res.write(cache[url]);
+				res.end();
+			} else {
+				let stream = fs.createReadStream(path);
+				stream.on('open', () => stream.pipe(res));
+				stream.on('error', () => res.end());
+			}
 		}
-		let httpServer;
+		let httpServer = http.createServer(onHTTPRequest),
+			httpsServer = null;
 		if (this.config.ssl) {
 			if (!containsKeys(this.config.ssl, ['key', 'cert'])) {
-				httpServer = http.createServer(onHTTPRequest);
 				warn(`.start(): SSL options in config file should contain two keys: ${`"key"`.white.bold}, ${`"cert"`.white.bold}.`);
 			} else {
 				let key = fs.readFileSync(this.config.ssl.key);
 				let cert = fs.readFileSync(this.config.ssl.cert);
 
-				httpServer = https.createServer({key, cert}, onHTTPRequest);
+				httpsServer = https.createServer({key, cert}, onHTTPRequest);
 				log("[HTTP] SSL credentials obtained.");
 			}
-		} else
-			httpServer = http.createServer(onHTTPRequest);
+		}
 
-		let io = socketio(httpServer);
-		io.use((socket, next) => {
+		bodjo._io = socketio(httpServer);
+		bodjo._io.use((socket, next) => {
 			let query = socket.handshake.query;
 
 			if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
 				return next(wsErrObj('max players', 6));
 			}
 
-			if (typeof query.role !== 'string' ||
-				typeof query.username !== 'string') {
-				return next(wsErrObj('"role" and "username" should be passed in query', 0));
+			if (typeof query.role !== 'string') {
+				return next(wsErrObj('"role" should be passed in query', 0));
 			}
 
 			if (query.role === 'spectator') {
-				if (!bodjo.__players[query.username])
-					return next(wsErrObj('player is not found', 1));
-
-				bodjo.__players[query.username].addSpectator(client);
+				bodjo.__spectators.push(socket);
 			} else if (query.role === 'player') {
-
+				if (typeof query.username !== 'string')
+					return next(wsErrObj('"username" should be passed in query', 0));
 				if (typeof query.token !== 'string')
 					return next(wsErrObj('gameSessionToken in query is not found (key "token")', 3));
 
@@ -165,7 +182,7 @@ class BodjoGame extends EventEmitter {
 				if (bodjo.__players[query.username]) {
 					bodjo.__players[query.username].socket.emit('new-tab');
 					bodjo.__players[query.username].socket.disconnect(true);
-					delete bodjo.__players[query.username]
+					delete bodjo.__players[query.username];
 					// return next(wsErrObj('player has already connected', 2));
 				}
 			} else {
@@ -173,36 +190,52 @@ class BodjoGame extends EventEmitter {
 			}
 			return next();
 		});
-		io.on('connection', socket => {
+		bodjo._io.on('connection', socket => {
 			let query = socket.handshake.query;
 			let role = query.role;
 			let username = query.username;
 
-			let player;
+			let player, id;
 			if (role === 'player') {
-				player = new Player(socket, username);
+				if (typeof bodjo.__playersIDs[username] === 'undefined') {
+					bodjo.__playersIDs[username] = bodjo.__availableIDs[0];
+					bodjo.__availableIDs.splice(0, 1);
+				}
+				id = bodjo.__playersIDs[username];
+				player = new Player(socket, username, id, bodjo);
 				bodjo.__players[username] = player;
 				bodjo.emit('player-connect', player);
 			}
 
-			socket.emit('scoreboard', bodjo.scoreboard.raw());
+			socket.emit('_scoreboard', bodjo.scoreboard.raw());
 
 			socket.on('disconnect', () => {
 				if (username != null && player && bodjo.__players[username]) {
 					// player.socket.close();
 					delete bodjo.__players[username];
 				}
+
+				if (username != null && bodjo.__playersIDs[username]) {
+					bodjo.__availableIDs.push(bodjo.__playersIDs[username]);
+					delete bodjo.__playersIDs[username];
+				}
 			})
 		});
 		bodjo.scoreboard.onUpdate = function () {
-			for (let username in bodjo.__players)
-				bodjo.__players[username].emit('scoreboard', bodjo.scoreboard.raw());
+			bodjo._io.emit('_scoreboard', bodjo.scoreboard.raw());
 		}
 		httpServer.listen(this.config.httpPort, this.config.httpHost || '0.0.0.0', function (error) {
 			if (error)
 				fatalerr(error);
-			else log('[HTTP] HTTP Server is listening at ' + (':'+bodjo.config.httpPort).yellow.bold)
+			else log('[HTTP] HTTP Server is listening at ' + (':'+bodjo.config.httpPort).yellow.bold);
 		});
+		if (httpsServer) {
+			httpsServer.listen(this.config.httpsPort, this.config.httpsHost || this.config.httpHost || '0.0.0.0', function (error) {
+				if (error)
+					err(error);
+				else log('[HTTP] HTTPS (API) Server is listening at ' + (':'+bodjo.config.httpsPort).yellow.bold);
+			})
+		}
 
 		if (!process.argv.includes('--dev')) {
 			// let tcpServer = net.createServer((socket) => {
@@ -327,12 +360,29 @@ class BodjoGame extends EventEmitter {
 			connectTCP();
 		}
 	}
+	async addBots(script, number) {
+		let config = this.config;
+		if (config instanceof Promise)
+			config = await config;
+		this.__bots = [];
+		for (let i = 1; i <= number; ++i) {
+			let username = 'bot' + i;
+			let token = ~~(Math.random()*999999999+99999) + '';
+			this.__gameSessionTokens[username] = [token];
+			let botscript = require(script)(config.httpPort, username, token);
+			console.log('Bot ' + username.yellow.bold + ' started.' + (' ('+token+')').grey);
+			this.__bots.push(username);
+		}
+	}
 }
 class Player {
-	constructor(socket, username) {
+	constructor(socket, username, id, bodjo) {
 		this.socket = socket;
 		this.username = username;
+		this.id = id;
+		this.knownIds = [];
 		this.spectators = [];
+		this.bodjo = bodjo;
 	}
 
 	addSpectator(socket) {
@@ -342,10 +392,14 @@ class Player {
 	emit() {
 		let data = arr(arguments);
 		this.socket.emit.apply(this.socket, data);
-		for (let spectator of this.spectators) {
-			//if (alive)
-			spectator.emit.apply(this.socket, data);
-		}
+		// for (let spectator of this.spectators) {
+		// 	//if (alive)
+		// 	spectator.emit.apply(this.socket, data);
+		// }
+		data.splice(1, 0, this.username);
+		this.bodjo.__spectators.forEach(spectator => {
+			spectator.emit.apply(spectator, data);
+		});
 	}
 
 	on() {
@@ -357,8 +411,10 @@ class Player {
 	}
 }
 class Scoreboard {
-	constructor(filename = "scoreboard.json") {
+	constructor(bodjo, filename = "scoreboard.json") {
 		this.onUpdate = null;
+		this.updateWhenNeeded = true;
+		this.wasUpdates = false;
 		this.sortFunction = function (a, b) {
 			if (typeof a.value === 'undefined') {
 				warn('[scoreboard] write ' + 'bodjo.scoreboard.sortFunction' + ' for sort.');
@@ -366,6 +422,7 @@ class Scoreboard {
 			}
 			return b.value - a.value;
 		}
+		this.bodjo = bodjo;
 
 		try {
 			this.data = JSON.parse(fs.readFileSync('scoreboard.json').toString());
@@ -379,40 +436,59 @@ class Scoreboard {
 	push(username, value) {
 		if (username instanceof Player)
 			username = username.username;
-		if (this.data[username] != value) {
-			this.data[username] = value;
-			if (this.onUpdate !== null)
-				this.onUpdate();
-		} else
-			this.data[username] = value;
+		if (/^bot\d+$/g.test(username))
+			return;
+
+		this.data[username] = value;
+		if (this.updateWhenNeeded)
+			this.onUpdate();
+		else
+			this.wasUpdates = true;
 		this.save();
+	}
+
+	update() {
+		// console.dir(this.data)
+		if (this.wasUpdates) {
+			this.wasUpdates = false;
+			this.onUpdate();
+		}
 	}
 
 	save() {
 		fs.writeFileSync('scoreboard.json', JSON.stringify(this.data));
 	}
 
+	getID(username) {
+		return this.bodjo.__playersIDs[username];
+	}
+
 	raw() {
-		let rawdata = keys(this.data).map(username => {
+		let rawdata = Array.from(Object.keys(this.data), username => {
 			if (typeof this.data[username] === 'object' &&
 				this.data[username] != null &&
 				!Array.isArray(this.data[username]))
-				return Object.assign(this.data[username], {username});
-			return {username, value: this.data[username]};
+				return Object.assign({username, id: this.getID(username)}, this.data[username]);
+			return {username, id: this.getID(username), value: this.data[username]};
 		}).sort(this.sortFunction);
 		for (let i = 0, place = 1; i < rawdata.length; ++i) {
 			rawdata[i].place = place;
-			if (i+1 < rawdata.length) {
+			if (i+1 < rawdata.length)
 				if (this.sortFunction(rawdata[i+1], rawdata[i]) > 0)
 					place++;
-			}
 		}
+		if (this.bodjo.__bots)
+			for (let botname of this.bodjo.__bots)
+				if (typeof this.getID(botname) === 'number')
+					rawdata.push({username: botname, id: this.getID(botname)});
 		return rawdata;
 	}
 
 	get(username) {
 		if (username instanceof Player)
 			username = username.username;
+		if (/^bot\d+$/g.test(username))
+			return undefined;
 		return this.data[username];
 	}
 

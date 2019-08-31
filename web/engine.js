@@ -3,7 +3,7 @@ function arr(args) {
 	return Array.prototype.slice.apply(args);
 }
 
-document.querySelector('title').innerHTML = 'bodjo-' + GAME_NAME + " (" + GAME_SERVER + ")";
+document.querySelector('title').innerHTML = GAME_NAME + " (" + GAME_SERVER + ")";
 
 let loaded = false;
 
@@ -18,11 +18,12 @@ let ctx = window.ctx = canvas.getContext('2d');
 let errorsContainer = workspace.querySelector('#errors');
 let controlsContainer = workspace.querySelector('#controls');
 
-const domain = 'bodjo';
+const domain = getDomain();
 
 class Bodjo extends EventEmitter {
 	constructor() {
 		super();
+		this.ids = {};
 		this.__renderArguments = [];
 		this.__controls = null;
 		this.storage = {
@@ -49,13 +50,13 @@ class Bodjo extends EventEmitter {
 			}
 		}
 	}
-	render() {
+	callRender() {
 		let args = arr(arguments);
 		if (args.length > 0)
 			this.__renderArguments = args;
 		if (this.__renderArguments.length == 0)
 			return;
-		this.emit.apply(bodjo, ['render'].concat(this.__renderArguments));
+		this.render.apply(bodjo, [canvas, ctx, this.resizeCanvas].concat(this.__renderArguments));
 	}
 
 	set controls (controls) {
@@ -71,10 +72,9 @@ class Bodjo extends EventEmitter {
 	}
 
 	getControl(name) {
-		for (let i = 0; i < this.__controls.length; ++i) {
+		for (let i = 0; i < this.__controls.length; ++i)
 			if (this.__controls[i].name == name)
 				return this.__controls[i];
-		}
 		return null;
 	}
 
@@ -217,7 +217,7 @@ class Bodjo extends EventEmitter {
 }
 window.bodjo = new Bodjo();
 
-function resizeCanvas(aspectRatio) {
+bodjo.resizeCanvas = function (aspectRatio) {
 	if (typeof aspectRatio !== 'number') {
 		if (typeof window.aspectRatio === 'undefined')
 			window.aspectRatio = 1;
@@ -252,10 +252,10 @@ function resizeCanvas(aspectRatio) {
 	canvas.style.width = W + 'px';
 	canvas.style.height = H + 'px';
 }
-resizeCanvas();
+bodjo.resizeCanvas();
 window.addEventListener('resize', function () {
-	resizeCanvas();
-	bodjo.render();
+	bodjo.resizeCanvas();
+	bodjo.callRender();
 });
 
 let container = workspace.querySelector("#container"); 
@@ -380,8 +380,8 @@ function updateWorkspaceWidth() {
 	workspace.style.width = workspaceWidth + 'px';
 	game.style.left = workspaceWidth + 'px';
 	resizeUI();
-	resizeCanvas();
-	bodjo.render();
+	bodjo.resizeCanvas();
+	bodjo.callRender();
 }
 function range(x, _min, _max) {
 	return Math.max(Math.min(x, _max), _min);
@@ -402,7 +402,7 @@ window.addEventListener('load', function () {
 		loaded = true;
 		loadCode();
 
-		bodjo.render();
+		bodjo.callRender();
 	});
 });
 
@@ -545,60 +545,59 @@ function loadDefaultCode(cb) {
 		}
 	}, false);
 }
-
+function getDomain() {
+	return (window.location.hostname.match(/\./g)||[]).length > 1 ? window.location.hostname.substring(window.location.hostname.indexOf('.')+1) : window.location.hostname;
+}
 function getCredentials(cb) {
 	let credentials = {};
-	credentials.role = window.location.pathname.indexOf('spectate') >= 0 ? 'spectator' : 'player';
-	if (credentials.role === 'spectate') {
-		// TODO: retrieving username from pathname
+	credentials.role = 'player';//window.location.pathname.indexOf('spectate') >= 0 ? 'spectator' : 'player';
+	if (DEV) {
+		credentials.username = bodjo.username = prompt('Username: ');
+		credentials.token = Math.round(Math.random()*9999999+99999) + '';
+		cb(credentials);
 	} else {
-		if (DEV) {
-			credentials.username = prompt('Username: ');
-			credentials.token = Math.round(Math.random()*9999999+99999) + '';
+		let gameToken = bodjo.storage.get('bodjo-game-token-'+GAME_SERVER);
+		let username = bodjo.storage.get('bodjo-username');
+		if (!!gameToken && !!username) {
+			credentials.username = username;
+			credentials.token = gameToken;
+			credentials.probable = true;
+			bodjo.username = username;
 			cb(credentials);
-		} else {
-			let gameToken = bodjo.storage.get('bodjo-game-token-'+GAME_SERVER);
-			let username = bodjo.storage.get('bodjo-username');
-			if (!!gameToken && !!username) {
-				credentials.username = username;
-				credentials.token = gameToken;
-				credentials.probable = true;
-				cb(credentials);
-				return;
-			}
-
-			TOKEN = bodjo.storage.get('bodjo-token');
-			if (!TOKEN) {
-				console.error("token in cookie and localStorage wasn't found.");
-				bodjo.showDialog('missing-token-dialog');
-				return;
-			}
-
-			GET(SERVER_HOST + '/games/join?name=' + GAME_SERVER + '&token=' + TOKEN, (status, data) => {
-				if (!status) {
-					console.warn("/games/join/: bad http response " + data.statusCode + ": " + data.statusText);
-					return;
-				}
-
-				if (data.status !== 'ok') {
-					console.warn('/games/join/: bad api response ' + data.statusCode + ': ' + data.statusText);
-					if (data.errParameter == 'token') {
-						bodjo.showDialog('missing-token-dialog');
-					}
-					return;
-				}
-
-				username = data.username;
-				gameToken = data.gameSessionToken;
-				bodjo.storage.set('bodjo-game-token-'+GAME_SERVER, gameToken);
-				bodjo.storage.set('bodjo-username', username);
-				credentials.username = username;
-				credentials.token = gameToken;
-				cb(credentials);
-			});
+			return;
 		}
-	}
 
+		TOKEN = bodjo.storage.get('bodjo-token');
+		if (!TOKEN) {
+			console.error("token in cookie and localStorage wasn't found.");
+			bodjo.showDialog('missing-token-dialog');
+			return;
+		}
+
+		GET(SERVER_HOST + '/games/join?name=' + GAME_SERVER + '&token=' + TOKEN, (status, data) => {
+			if (!status) {
+				console.warn("/games/join/: bad http response " + data.statusCode + ": " + data.statusText);
+				return;
+			}
+
+			if (data.status !== 'ok') {
+				console.warn('/games/join/: bad api response ' + data.statusCode + ': ' + data.statusText);
+				if (data.errParameter == 'token') {
+					bodjo.showDialog('missing-token-dialog');
+				}
+				return;
+			}
+
+			username = data.username;
+			gameToken = data.gameSessionToken;
+			bodjo.storage.set('bodjo-game-token-'+GAME_SERVER, gameToken);
+			bodjo.storage.set('bodjo-username', username);
+			credentials.username = username;
+			credentials.token = gameToken;
+			bodjo.username = username;
+			cb(credentials);
+		});
+	}
 }
 function connect(credentials) {
 	let path = window.location.protocol+'//'+window.location.host+'?'+
@@ -656,6 +655,10 @@ function connect(credentials) {
 
 	socket.on('new-tab', () => {
 		bodjo.showDialog('new-tab-dialog');
+	});
+	socket.on('_scoreboard', (scoreboard) => {
+		scoreboard.forEach(player => bodjo.ids[player.id] = player.username);
+		bodjo.emit('scoreboard', scoreboard.filter(player => !/^bot/g.test(player.username)));
 	});
 
 	let oldEmit = socket.emit;
@@ -782,7 +785,7 @@ let playersData = {};
 let playersToLoad = {};
 let lastPlayerAdded = -1;
 function Player(username) {
-	if (playersData[username]) {
+	if (typeof playersData[username] !== 'undefined') {
 		if (playersData[username] == null)
 			return "<div class='bodjo-player'><span class='image'></span><span class='username'>"+username+"</span></div>";
 		return "<div class='bodjo-player'><span class='image' style=\"background-image:url('"+playersData[username].image[64]+"');\"></span><span class='username'>"+username+"</span></div>";
@@ -798,11 +801,14 @@ function Player(username) {
 				if (status && data.status === 'ok') {
 					let usernames = Object.keys(data.result)
 					for (let i = 0; i < usernames.length; ++i) {
-						playersData[usernames[i]] = data.result[usernames[i]];
+						let userinfo = data.result[usernames[i]];
+						playersData[usernames[i]] = userinfo;
 
-						let playerElement = document.querySelector('#'+playersToLoad[usernames[i]]);
-						playerElement.querySelector('span.image').style.backgroundImage = "url('"+data.result[usernames[i]].image[64]+"')";
-						playerElement.className = 'bodjo-player';
+						if (userinfo != null) {
+							let playerElement = document.querySelector('#'+playersToLoad[usernames[i]]);
+							playerElement.querySelector('span.image').style.backgroundImage = "url('"+data.result[usernames[i]].image[64]+"')";
+							playerElement.className = 'bodjo-player';
+						}
 					}
 					playersToLoad = {};
 				}

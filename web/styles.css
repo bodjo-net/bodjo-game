@@ -174,10 +174,10 @@ html, head, body {
 	padding-right: 30px;
 }
 #errors .error {
-	background: rgba(200, 0, 0, 0.4);
+	background: rgba(255, 150, 150, 0.85);
 }
 #errors .notification {
-	background: rgba(200, 180, 0, 0.4);
+	background: rgba(250, 200, 20, 0.8);
 }
 #errors .error .ripple,
 #errors .notification .ripple {
@@ -428,6 +428,8 @@ input[type=range]::-moz-range-thumb {
 	left: 0;
 	right: 0;
 	bottom: 0;
+	width: 60%;
+	padding: 10% 20%;
 	background: #FAFAFA;
 	color: #000000;
 	text-align: center;

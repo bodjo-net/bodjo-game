@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="shortcut icon" type="image/png" href="/favicon.png">
+	<title></title>
+	<link rel="stylesheet" type="text/css" href="/styles.css">
+	<link rel="stylesheet" type="text/css" href="/spectate/styles.css">
+	<link href="https://fonts.googleapis.com/css?family=Roboto+Mono:400,700|Source+Code+Pro:400,700&display=swap&subset=cyrillic" rel="stylesheet">
+</head>
+<body>
+	<div id="main">
+		<div id="workspace">
+			<div id="bar">
+				<a href="https://bodjo.net/" id="back" class="btn">← Обратно на bodjo.net</a>
+				<!--div id="tabs-container">
+					<div class="tab btn active" id="docs-tab">Документация</div>
+					<div class="tab btn" id="code-tab">Код</div>
+					<div class="tab btn" id="scoreboard-tab">Таблица</div>
+				</div-->
+			</div>
+			<div id="container">
+				<!--div id="docs-page" class="active">
+				</div>
+				<div id="code-page">
+					<div id="code-wrapper">
+						<div id="code"></div>
+						<div id="errors">
+						</div>
+					</div>
+					<div id="controls"></div>
+				</div-->
+				<div id="scoreboard-page" class="active">
+				</div>
+			</div>
+
+			<div id="resizer"></div>
+		</div>
+		<div id="game">
+			<div id="no-players">Нет активных игроков :С<br><a href="//bodjo.net/register/">Регистрируйтесь</a> или <a href="//bodjo.net/login/">войдите</a> и <a href="/">начните играть</a> сами!</div>
+			<span id="canvases-container"></span>
+		</div>
+	</div>
+	<div id="new-tab-dialog" class='dialog'>
+		<h3>Oops... So many tabs.</h3>
+		<p>Bodjo game supports only one active tab.</p>
+		<p>You can reload this page to continue using this tab or close it.</p>
+		<div class='btn' onclick="window.location.reload()">RELOAD TAB</div>
+	</div>
+	<div id="missing-token-dialog" class='dialog'>
+		<h3>We lost your token :C</h3>
+		<p>We should have received your token after redirecting from main page.</p>
+		<p>Probably it has expired or you haven't logined at all.</p>
+		<br>
+		<p>Sorry for such accident. Please, come back here after logging in.</p>
+		<a class='btn' href="https://bodjo.net/">GO TO MAIN PAGE</a>
+	</div>
+	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+	<script type="text/javascript" src="/polyfills.js"></script>
+	<script type="text/javascript" src="/spectate/engine.js"></script>
+	<script type="text/javascript" src="/renderer.js"></script>
+	<script type="text/javascript" src="/spectate.js"></script>
+	<script type="text/javascript" src="/btn.js"></script>
+</body>
+</html>
