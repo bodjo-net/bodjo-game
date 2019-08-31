@@ -635,6 +635,7 @@ function connect(credentials) {
 					}
 					break;
 				case 6: // max players
+					bodjo.showDialog('max-players-dialog');
 					console.error('[socket] max players');
 					break;
 				default:

@@ -157,10 +157,6 @@ class BodjoGame extends EventEmitter {
 		bodjo._io.use((socket, next) => {
 			let query = socket.handshake.query;
 
-			if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
-				return next(wsErrObj('max players', 6));
-			}
-
 			if (typeof query.role !== 'string') {
 				return next(wsErrObj('"role" should be passed in query', 0));
 			}
@@ -168,6 +164,10 @@ class BodjoGame extends EventEmitter {
 			if (query.role === 'spectator') {
 				bodjo.__spectators.push(socket);
 			} else if (query.role === 'player') {
+				if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
+					return next(wsErrObj('max players', 6));
+				}
+
 				if (typeof query.username !== 'string')
 					return next(wsErrObj('"username" should be passed in query', 0));
 				if (typeof query.token !== 'string')
