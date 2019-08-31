@@ -88,8 +88,9 @@ class Bodjo extends EventEmitter {
 
 		for (let i = 0; i < data.length; ++i) {
 			html += '<tr>';
-			for (let j = 0; j < data[i].length; ++j)
+			for (let j = 0; j < data[i].length; ++j) {
 				html += '<td>' + data[i][j] + '</td>';
+			}
 			html += '</tr>';
 		}
 
@@ -439,11 +440,21 @@ function changeCodeChange(val) {
 		if (!codeChanged && text[text.length-1] == '*')
 			codeTab.innerText = text = text.substring(0, text.length-1);
 	}
+
+	let _lastSaved = lastSaved;
+	setTimeout(() => {
+		if (lastSaved == _lastSaved && codeChanged)
+			saveCode(true, true);
+	}, 10000);
 }
 
-function saveCode(uploadToMainServer) {
+let lastSaved = -1;
+function saveCode(uploadToMainServer, auto) {
 	if (typeof uploadToMainServer === 'undefined')
 		uploadToMainServer = true;
+	if (typeof auto === 'undefined')
+		auto = false;
+	lastSaved = Date.now();
 
 	changeCodeChange(false)
 	bodjo.storage.set('bodjo-code-time-'+GAME_NAME, Date.now());
@@ -459,7 +470,7 @@ function saveCode(uploadToMainServer) {
 			if (status && data.status == 'ok') {
 				console.log('code saved. (uploaded to main server)');
 
-				bodjo.showNotification('Code saved. (Uploaded to server)', 2500);
+				bodjo.showNotification('Code saved. (Uploaded to server)', auto?1000:2500);
 			} else {
 				if (!status)
 					console.warn('failed to save code: bad http response ' + data.statusCode + ': ' + data.statusText);
