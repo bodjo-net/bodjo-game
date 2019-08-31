@@ -4,6 +4,7 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta name="theme-color" content="#000000" />
 	<title></title>
 	<link rel="stylesheet" type="text/css" href="/styles.css">
 	<link rel="stylesheet" type="text/css" href="/spectate/styles.css">
@@ -41,20 +42,6 @@
 			<div id="no-players">Нет активных игроков :С<br><a href="//bodjo.net/register/">Зарегистрируйтесь</a> или <a href="//bodjo.net/login/">войдите</a> и <a href="/">начните играть</a> сами!</div>
 			<span id="canvases-container"></span>
 		</div>
-	</div>
-	<div id="new-tab-dialog" class='dialog'>
-		<h3>Oops... So many tabs.</h3>
-		<p>Bodjo game supports only one active tab.</p>
-		<p>You can reload this page to continue using this tab or close it.</p>
-		<div class='btn' onclick="window.location.reload()">RELOAD TAB</div>
-	</div>
-	<div id="missing-token-dialog" class='dialog'>
-		<h3>We lost your token :C</h3>
-		<p>We should have received your token after redirecting from main page.</p>
-		<p>Probably it has expired or you haven't logined at all.</p>
-		<br>
-		<p>Sorry for such accident. Please, come back here after logging in.</p>
-		<a class='btn' href="https://bodjo.net/">GO TO MAIN PAGE</a>
 	</div>
 	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
 	<script type="text/javascript" src="/polyfills.js"></script>

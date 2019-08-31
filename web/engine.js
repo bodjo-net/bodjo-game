@@ -56,7 +56,7 @@ class Bodjo extends EventEmitter {
 			this.__renderArguments = args;
 		if (this.__renderArguments.length == 0)
 			return;
-		this.render.apply(bodjo, [canvas, ctx, this.resizeCanvas].concat(this.__renderArguments));
+		this.render.apply(this, [canvas, ctx, this.resizeCanvas].concat(this.__renderArguments));
 	}
 
 	set controls (controls) {
