@@ -205,7 +205,10 @@ class BodjoGame extends EventEmitter {
 				player = new Player(socket, username, id, bodjo);
 				bodjo.__players[username] = player;
 				bodjo.emit('player-connect', player);
+			} else if (role === 'spectator') {
+				bodjo.emit('spectator-connect', socket);
 			}
+			bodjo.emit('connect', socket);
 
 			socket.emit('_scoreboard', bodjo.scoreboard.raw());
 

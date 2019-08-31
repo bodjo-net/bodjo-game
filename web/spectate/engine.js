@@ -97,7 +97,7 @@ class Bodjo extends EventEmitter {
 		let rowsCount = Math.max(1, Math.round(width / height)) * 2;
 		let N = n < rowsCount ? n : rowsCount;
 
-		let cwidth = Math.min((width) / N - 20, height - 60);
+		let cwidth = Math.min((width) / N - 20, height - (usernames.length==1&&usernames[0].length==0 ? 25 : 60));
 
 		for (let i = 0; i < usernames.length; ++i) {
 			let canvas = this.canvases[usernames[i]];
@@ -107,6 +107,8 @@ class Bodjo extends EventEmitter {
 			canvas.canvas.style.height = (cwidth / canvas.aspectRatio) + 'px';
 			if (this.render) {
 				this.render.apply(this, [canvas.canvas, canvas.ctx, (newAspectRatio) => {
+					if (isNaN(newAspectRatio))
+						return;
 					let wasAspectRatio = canvas.aspectRatio;
 					canvas.aspectRatio = newAspectRatio;
 					if (newAspectRatio != wasAspectRatio)
