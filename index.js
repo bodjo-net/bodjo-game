@@ -5,8 +5,25 @@ const https = require('https');
 const socketio = require('socket.io');
 const net = require('net');
 const mime = require('mime');
-// const crypto = require('crypto');
 const EventEmitter = require('events');
+const { spawn } = require('child_process');
+const B = require('./binary.js');
+const peerOptions = {
+	iceServers: [
+		//{urls:['stun:localhost:3478']}
+		// {urls:['stun:stun.l.google.com:19302']}//,
+		// {urls:['stun:stun1.l.google.com:19302']},
+		// {urls:['stun:stun2.l.google.com:19302']},
+		// {urls:['stun:stun3.l.google.com:19302']},
+		// {urls:['stun:stun4.l.google.com:19302']}
+	]
+};
+var dataChannelOptions = {
+	ordered: false,
+	maxRetransmits: 0
+};
+
+let version = JSON.parse(fs.readFileSync(__dirname + '/package.json').toString()).version;
 
 require('./logger.js');
 require('./utils.js');
@@ -47,9 +64,20 @@ class BodjoGame extends EventEmitter {
 		this.__jsFilesDir = dir;
 	}
 	broadcast() {
-		if (this._io) {
-			this._io.emit.apply(this._io, Array.prototype.slice.apply(arguments));
+		// if (this._io) {
+		// 	this._io.emit.apply(this._io, Array.prototype.slice.apply(arguments));
+		// }
+		for (let username in this.__players) {
+			let player = this.__players[username];
+			player._emit.apply(player, arr(arguments));
 		}
+		for (let id in this.__spectators) {
+			let spectator = this.__spectators[id];
+			spectator.emit.apply(spectator, arr(arguments));
+		}
+	}
+	updateOnline() {
+		this.broadcast('online', Object.keys(this.__players));
 	}
 	async start() {
 		let bodjo = this;
@@ -86,7 +114,12 @@ class BodjoGame extends EventEmitter {
 				return;
 			}
 			let origin = req.headers['origin'];
-			if (origin && ['http://bodjo:3000','http://bodjo.net','https://bodjo.net','http://localhost:3000','http://localhost','http://bodjo','http://77.120.70.136'].includes(origin))
+			if (origin && ['http://bodjo:3000',
+						   'http://bodjo.net',
+						   'https://bodjo.net',
+						   'http://localhost:3000',
+						   'http://localhost',
+						   'http://bodjo'].includes(origin))
 				res.setHeader('Access-Control-Allow-Origin', origin);
 
 			if (url === '/status') {
@@ -126,6 +159,7 @@ class BodjoGame extends EventEmitter {
 				res.write('window.DEV = ' + (process.argv.includes('--dev') ? 'true' : 'false') + ';\n');
 				res.write('window.GAME_NAME = \'' + bodjo.config.game + '\';\n');
 				res.write('window.GAME_SERVER = \'' + bodjo.config.name + '\';\n');
+				res.write('window.LIB_VERSION = \'' + version + '\';\n');
 			}
 
 			if (!process.argv.includes('--dev')) {
@@ -162,7 +196,7 @@ class BodjoGame extends EventEmitter {
 			}
 
 			if (query.role === 'spectator') {
-				bodjo.__spectators.push(socket);
+				// bodjo.__spectators.push(socket);
 			} else if (query.role === 'player') {
 				if (keys(bodjo.__players).length >= bodjo.config.maxPlayers) {
 					return next(wsErrObj('max players', 6));
@@ -173,7 +207,7 @@ class BodjoGame extends EventEmitter {
 				if (typeof query.token !== 'string')
 					return next(wsErrObj('gameSessionToken in query is not found (key "token")', 3));
 
-				if (!process.argv.includes('--dev') &&
+				if (!process.argv.includes('--dev') && query.username.indexOf('bot') != 0 &&
 					(!bodjo.__gameSessionTokens[query.username] ||
 					 !bodjo.__gameSessionTokens[query.username].includes(query.token))) {
 					return next(wsErrObj('gameSessionToken is invalid', 4));
@@ -195,34 +229,46 @@ class BodjoGame extends EventEmitter {
 			let role = query.role;
 			let username = query.username;
 
-			let player, id;
-			if (role === 'player') {
-				if (typeof bodjo.__playersIDs[username] === 'undefined') {
-					bodjo.__playersIDs[username] = bodjo.__availableIDs[0];
-					bodjo.__availableIDs.splice(0, 1);
+			let player, id, spectator;
+			let peer = new Peer(socket);
+
+			peer.on('connect', () => {
+				if (role === 'player') {
+					if (typeof bodjo.__playersIDs[username] === 'undefined') {
+						bodjo.__playersIDs[username] = bodjo.__availableIDs[0];
+						bodjo.__availableIDs.splice(0, 1);
+					}
+					id = bodjo.__playersIDs[username];
+					player = new Player(socket, peer, username, id, bodjo);
+					bodjo.__players[username] = player;
+					bodjo.emit('player-connect', player);
+					setTimeout(function () {
+						bodjo.updateOnline();
+					}, 250);
+				} else if (role === 'spectator') {
+					id = ~~(Math.random()*99999);
+					spectator = new Spectator(socket, peer, username, bodjo);
+					bodjo.__spectators[id] = spectator;
+					bodjo.emit('spectator-connect', spectator);
 				}
-				id = bodjo.__playersIDs[username];
-				player = new Player(socket, username, id, bodjo);
-				bodjo.__players[username] = player;
-				bodjo.emit('player-connect', player);
-			} else if (role === 'spectator') {
-				bodjo.emit('spectator-connect', socket);
-			}
-			bodjo.emit('connect', socket);
+				bodjo.emit('connect', socket);
+				socket.emit('_scoreboard', bodjo.scoreboard.raw());
+			});
+			peer.on('disconnect', onDisconnect);
+			socket.on('disconnect', onDisconnect);
 
-			socket.emit('_scoreboard', bodjo.scoreboard.raw());
-
-			socket.on('disconnect', () => {
-				if (username != null && player && bodjo.__players[username]) {
-					// player.socket.close();
+			function onDisconnect() {
+				if (username != null && bodjo.__players[username]) {
+					bodjo.__players[username].onclose();
 					delete bodjo.__players[username];
+					bodjo.updateOnline();
 				}
 
 				if (username != null && bodjo.__playersIDs[username]) {
 					bodjo.__availableIDs.push(bodjo.__playersIDs[username]);
 					delete bodjo.__playersIDs[username];
 				}
-			})
+			}
 		});
 		bodjo.scoreboard.onUpdate = function () {
 			bodjo._io.emit('_scoreboard', bodjo.scoreboard.raw());
@@ -363,54 +409,127 @@ class BodjoGame extends EventEmitter {
 			connectTCP();
 		}
 	}
-	async addBots(script, number) {
-		let config = this.config;
-		if (config instanceof Promise)
-			config = await config;
-		this.__bots = [];
-		for (let i = 1; i <= number; ++i) {
-			let username = 'bot' + i;
-			let token = ~~(Math.random()*999999999+99999) + '';
-			this.__gameSessionTokens[username] = [token];
-			let botscript = require(script)(config.httpPort, username, token);
-			console.log('Bot ' + username.yellow.bold + ' started.' + (' ('+token+')').grey);
-			this.__bots.push(username);
-		}
-	}
+	async addBots() {}
+	// async addBots(script, number) {
+	// 	let config = this.config;
+	// 	if (config instanceof Promise)
+	// 		config = await config;
+	// 	this.__bots = [];
+	// 	for (let i = 1; i <= number; ++i) {
+	// 		let username = 'bot' + i;
+	// 		let token = ~~(Math.random()*999999999+99999) + '';
+	// 		this.__gameSessionTokens[username] = [token];
+	// 		let botscript = require(script)(config.httpPort, username, token);
+	// 		console.log('Bot ' + username.yellow.bold + ' started.' + (' ('+token+')').grey);
+	// 		this.__bots.push(username);
+	// 	}
+	// }
 }
 class Player {
-	constructor(socket, username, id, bodjo) {
+	constructor(socket, peer, username, id, bodjo) {
+		this.emitter = new EventEmitter();
+
 		this.socket = socket;
 		this.username = username;
 		this.id = id;
-		this.knownIds = [];
-		this.spectators = [];
 		this.bodjo = bodjo;
+		this.peer = peer;
+
+		peer.on('disconnect', () => {
+			this.peer = null;
+			this.emitter.emit('disconnect');
+			if (this.username != null && this.bodjo.__players[username]) {
+				if (this.socket.connected)
+					this.socket.disconnect(true);
+				delete this.bodjo.__players[username];
+			}
+
+			if (this.username != null && this.bodjo.__playersIDs[this.username]) {
+				this.bodjo.__availableIDs.push(this.bodjo.__playersIDs[this.username]);
+				delete this.bodjo.__playersIDs[this.username];
+			}
+		});
+		peer.on('message', message => {
+			try {
+				let input = B.decode(message);
+				for (let i = 0; i < input.length; ++i)
+					if (input[i] instanceof ArrayBuffer) 
+						input[i] = Buffer.from(input[i]);
+				this.emitter.emit.apply(this.emitter, input);
+			} catch (e) {
+				console.error(e);
+			}
+		});
 	}
 
-	addSpectator(socket) {
-		this.spectators.push(socket);
+	onclose() {
+		this.emitter.emit('disconnect');
+		if (this.peer != null) {
+			this.peer.close();
+		}
+	}
+
+	on() {
+		this.emitter.on.apply(this.emitter, arr(arguments));
+	}
+	once() {
+		this.emitter.once.apply(this.emitter, arr(arguments));
 	}
 
 	emit() {
 		let data = arr(arguments);
-		this.socket.emit.apply(this.socket, data);
-		// for (let spectator of this.spectators) {
-		// 	//if (alive)
-		// 	spectator.emit.apply(this.socket, data);
-		// }
+		if (this.peer != null) {
+			this.peer.send(B.encode(data).buffer);
+		}
+
 		data.splice(1, 0, this.username);
-		this.bodjo.__spectators.forEach(spectator => {
-			spectator.emit.apply(spectator, data);
+		for (let id in this.bodjo.__spectators) {
+			this.bodjo.__spectators[id].emit.apply(this.bodjo.__spectators[id], data);
+		}
+	}
+
+	_emit() {
+		let data = arr(arguments);
+		if (this.peer != null) {
+			this.peer.send(B.encode(data).buffer);
+		}
+	}
+}
+class Spectator {
+	constructor(socket, peer, playerUsername, bodjo) {
+		this.emitter = new EventEmitter();
+
+		this.socket = socket;
+		this.peer = peer;
+		this.username = playerUsername;
+		this.bodjo = bodjo;
+
+		peer.on('disconnect', () => {
+			this.peer = null;
+			this.emitter.emit('disconnect');
+		});
+		peer.on('message', message => {
+			try {
+				let input = B.decode(message);
+				if (input.length > 0 && 
+					typeof input[0] === 'string')
+					this.emitter.emit.apply(this.emitter, input);
+			} catch (e) {
+				console.error(e);
+			}
 		});
 	}
 
 	on() {
-		this.socket.on.apply(this.socket, arr(arguments));
+		this.emitter.on.apply(this.emitter, arr(arguments));
+	}
+	once() {
+		this.emitter.once.apply(this.emitter, arr(arguments));
 	}
 
-	once() {
-		this.socket.once.apply(this.socket, arr(arguments));
+	emit() {
+		if (this.peer != null)
+			this.peer.send(B.encode(arr(arguments)).buffer);
 	}
 }
 class Scoreboard {
@@ -499,6 +618,92 @@ class Scoreboard {
 		log('[scoreboard] scoreaboard cleared');
 		this.data = {};
 		this.save();
+		if (this.updateWhenNeeded)
+			this.onUpdate();
+		else
+			this.wasUpdates = true;
 	}
 }
+
+class Peer {
+	constructor(socket) {
+		this.emitter = new EventEmitter();
+
+		this.socket = socket;
+		this.process = spawn('node', [__dirname + '/peer.js']);
+		this.closed = false;
+		this.process.on('close', () => {
+			if (!this.closed) {
+				this.closed = true;
+				this.emitter.emit('disconnect');
+			}
+			if (this.socket.connected)
+				this.socket.disconnect(1);
+		});
+		this.socket.on('disconnect', () => {
+			if (!this.closed) {
+				this.closed = true;
+				this.emitter.emit('disconnect');
+			}
+		});
+		this.socket.on('answer', (answer) => {
+			this.process.stdin.write(B.encode([
+				'answer',
+				answer
+			]));
+		});
+		this.socket.on('candidate', (candidate) => {
+			this.process.stdin.write(B.encode([
+				'candidate',
+				candidate
+			]));
+		});
+		this.process.stderr.on('data', (chunk) => {
+			console.log(chunk.toString().red);
+		});
+		this.process.stdout.on('data', (chunk) => {
+			if (this.closed)
+				return;
+
+			let message = B.decode(chunk);
+			if (message.length > 0) {
+				if (message[0] == 'candidate') {
+					this.socket.emit('candidate', message[1]);
+				} else if (message[0] == 'offer') {
+					this.socket.emit('offer', message[1]);
+				} else if (message[0] == 'message') {
+					this.emitter.emit('message', message[1]);
+				} else if (message[0] == 'open') {
+					this.emitter.emit('connect');
+				} else if (message[0] == 'close') {
+					this.emitter.emit('disconnect');
+					this.closed = true;
+					if (this.socket.connected)
+						this.socket.disconnect(1);
+				}
+			}
+		});
+		this.process.stdin.write(B.encode([
+			'options', 
+			peerOptions, 
+			dataChannelOptions
+		]));
+	}
+
+	close() {
+		if (this.process.connected)
+			this.process.kill();
+	}
+
+	send(message) {
+		if (this.closed)
+			return;
+		this.process.stdin.write(B.encode(['message', message]));
+	}
+
+	on() {
+		this.emitter.on.apply(this.emitter, arr(arguments));
+	}
+}
+
 module.exports = BodjoGame;

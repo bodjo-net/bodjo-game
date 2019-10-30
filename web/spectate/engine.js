@@ -1,3 +1,4 @@
+Loading.header(GAME_SERVER, 'v' + LIB_VERSION);
 Object.getOwnPropertyNames(Math).forEach(k => window[k] = Math[k]);
 function arr(args) {
 	return Array.prototype.slice.apply(args);
@@ -10,7 +11,16 @@ let workspace = document.querySelector('#workspace');
 let game = document.querySelector('#game');
 let scoreboard = document.querySelector('#scoreboard-page');
 let noplayers = document.querySelector('#no-players');
-
+const webrtcOptions = {
+	iceServers: [
+		// {urls:['stun:localhost:3478']}
+		{urls:['stun:stun.l.google.com:19302']}//,
+		// {urls:['stun:stun1.l.google.com:19302']},
+		// {urls:['stun:stun2.l.google.com:19302']},
+		// {urls:['stun:stun3.l.google.com:19302']},
+		// {urls:['stun:stun4.l.google.com:19302']}
+	]
+};
 
 const domain = getDomain();
 class Bodjo extends EventEmitter {
@@ -43,7 +53,6 @@ class Bodjo extends EventEmitter {
 			}
 		}
 	}
-
 	callRender(username) {
 		if (arguments.length == 0) {
 			this.resizeCanvases();
@@ -80,7 +89,7 @@ class Bodjo extends EventEmitter {
 					canvas.aspectRatio = newAspectRatio;
 					if (newAspectRatio != wasAspectRatio)
 						this.resizeCanvases();
-				}].concat(canvas.args))
+				}, true].concat(canvas.args))
 	}
 
 	remove(username) {
@@ -113,7 +122,7 @@ class Bodjo extends EventEmitter {
 					canvas.aspectRatio = newAspectRatio;
 					if (newAspectRatio != wasAspectRatio)
 						this.resizeCanvases();
-				}].concat(canvas.args));
+				}, false].concat(canvas.args));
 			}
 		}
 
@@ -136,13 +145,33 @@ class Bodjo extends EventEmitter {
 		}
 
 		scoreboard.innerHTML = html;
+
+		setTimeout(updateOnline, 10);
 	}
 }
 
 window.bodjo = new Bodjo();
 
+let langs = ['en', 'ru'], loadings = [];
+bodjo.lang = bodjo.storage.get('bodjo-lang') || 'en';
+if (langs.indexOf(bodjo.lang) < 0)
+	bodjo.lang = langs[0];
+GET('/text.json', (status, text) => {
+	if (status) {
+		let labels = text[bodjo.lang];
+		for (let selector in labels) {
+			if (selector == 'loadings') {
+				loadings = labels[selector];
+				continue;
+			}
+			let s = document.querySelector(selector);
+			if (s != null)
+				s.innerHTML = labels[selector];
+		}
+	}
+});
 
-let socket;
+let socket, psocket;
 window.addEventListener('load', function () {
 	GET('https://bodjo.net/SERVER_HOST', (status, hostname) => {
 		if (status)
@@ -151,6 +180,7 @@ window.addEventListener('load', function () {
 		bodjo.callRender();
 	});
 });
+let closing = false;
 function connect() {
 	let path = window.location.protocol+'//'+window.location.host+'?role=spectator';
 	socket = io(path);
@@ -164,20 +194,163 @@ function connect() {
 		window.addEventListener("beforeunload", closeSocketEvent, false);
 	});
 	socket.on('disconnect', () => {
+		closing = true;
 		window.removeEventListener("beforeunload", closeSocketEvent, false);
 	});
 	socket.on('_scoreboard', (scoreboard) => {
 		scoreboard.forEach(player => bodjo.ids[player.id] = player.username);
 		bodjo.emit('scoreboard', scoreboard.filter(player => !/^bot/g.test(player.username)));
 	});
+
+
+	Loading.put(loadings[0]);
+	socket.on('connect', () => {
+		Loading.put(loadings[1]);
+		
+		var onevent = socket.onevent;
+		socket.onevent = function (packet) {
+		    var args = packet.data || [];
+		    onevent.call (this, packet);
+		    packet.data = ["*"].concat(args);
+		    onevent.call(this, packet);
+		};
+
+		peer = new RTCPeerConnection(webrtcOptions);
+		peer.ondatachannel = (event) => {
+			channel = event.channel;
+			Loading.put(loadings[4]);
+			channel.onopen = () => {
+				Loading.put(loadings[5]);
+				Loading.hide();
+				psocket = new PseudoSocket(socket, peer, channel)
+				psocket.on('online', updateOnline);
+				bodjo.emit('connect', psocket);
+
+				for (let i = 0; i < bufferedMessages.length; ++i)
+					psocket.emitter.emit.apply(psocket.emitter, bufferedMessages[i]);
+				bufferedMessages = [];
+
+			}
+		};
+		peer.onicecandidate = (event) => {
+			if (event && event.candidate) {
+				Loading.put(loadings[6] + ' (' + event.candidate.protocol + ')');
+				socket.emit('candidate', event.candidate);
+			}
+		};
+	});
+	socket.on('candidate', (candidate) => {
+		Loading.put(loadings[7] + ' (' + candidate.protocol + ')');
+		peer.addIceCandidate(new RTCIceCandidate(candidate));
+	});
+	socket.on('offer', (offer) => {
+		Loading.put(loadings[2]);
+		peer.setRemoteDescription(offer);
+		peer.createAnswer()
+			.then((answer) => {
+				Loading.put(loadings[3]);
+				peer.setLocalDescription(answer);
+				socket.emit('answer', answer);
+			})
+			.catch(console.error);
+	});
+	let bufferedMessages = [];
+	socket.on('*', function () {
+		let args = Array.prototype.slice.apply(arguments);
+		if (psocket != null) {
+			psocket.emitter.emit.apply(psocket.emitter, args);
+		} else 
+			bufferedMessages.push(args);
+	});
+
+	socket.on('disconnect', () => {
+		if (closing)
+			return;
+		Loading.show();
+		Loading.put(loadings[12]);
+	});
+
 	
-	let oldEmit = socket.emit;
-	socket.emit = function () {
-		bodjo.emit.apply(bodjo, arr(arguments).concat([socket]));
-		oldEmit.apply(socket, arr(arguments));
+	// let oldEmit = socket.emit;
+	// socket.emit = function () {
+	// 	bodjo.emit.apply(bodjo, arr(arguments).concat([socket]));
+	// 	oldEmit.apply(socket, arr(arguments));
+	// }
+}
+class PseudoSocket {
+	constructor(socket, peer, channel) {
+		this.emitter = new EventEmitter();
+
+		this.socket = socket;
+		this.peer = peer;
+		this.channel = channel;
+
+		channel.onmessage = (event) => {
+			if (event.type != 'message' ||
+				!(event.data instanceof ArrayBuffer))
+				return;
+
+			try {
+				let buff = event.data;
+				let len = (new Uint8Array(buff.slice(0, 1)))[0];
+				let lens = new Uint16Array(buff.slice(1, 1+len*2));
+				let buffs = new Array(len);
+				for (let i = 0, j = 1 + len * 2; i < len; ++i) {
+					buffs[i] = buff.slice(j, j + lens[i]);
+					j += lens[i];
+				}
+				let elements = new Array(len);
+				for (let i = 0; i < len; ++i) {
+					let type = (new Uint8Array(buffs[i].slice(0, 1)))[0];
+					if (type == 0) {
+						elements[i] = ab2str(buffs[i].slice(1));
+					} else if (type == 1) {
+						elements[i] = JSON.parse(ab2str(buffs[i].slice(1)));
+					} else if (type == 2) {
+						elements[i] = (new Int16Array(buffs[i].slice(1)))[0];
+					} else if (type == 3) {
+						elements[i] = buffs[i].slice(1);
+					}
+				}
+				if (elements.length > 0 && 
+					typeof elements[0] === 'string')
+					this.emitter.emit.apply(this.emitter, elements);
+			} catch (e) {
+				console.error(e);
+			}
+		}
+		channel.onclose = () => {
+			this.emitter.emit('disconnect');
+			if (this.peer.connectionState == 'connected')
+				this.peer.close();
+			if (this.socket.connected)
+				this.socket.close();
+		}
+	}
+
+	emit() {
+		let data = arr(arguments);
+
+		let buffers = data.map(B);
+		let u = new Array(buffers.length*2 + 1);
+		u[0] = Uint8(buffers.length);
+		for (let i = 0; i < buffers.length; ++i)
+			u[1 + i] = Uint16(buffers[i].byteLength);
+		for (let i = 0; i < buffers.length; ++i)
+			u[1 + buffers.length + i] = buffers[i];
+
+		let buffer = concat.apply(this, u);
+		if (this.channel != null)
+			this.channel.send(buffer);
+	}
+
+	on() {
+		this.emitter.on.apply(this.emitter, arr(arguments));
+	}
+	once() {
+		this.emitter.once.apply(this.emitter, arr(arguments));
 	}
 }
-
 
 let interval = null;
 function resizeUI() {
@@ -232,7 +405,7 @@ function updateWorkspaceWidth() {
 	game.style.left = workspaceWidth + 'px';
 	resizeUI();
 	bodjo.resizeCanvases();
-	bodjo.callRender();
+	// bodjo.callRender();
 }
 function range(x, _min, _max) {
 	return Math.max(Math.min(x, _max), _min);
@@ -249,7 +422,7 @@ function getDomain() {
 
 let playersData = {};
 let playersToLoad = {};
-let lastPlayerAdded = -1;
+let lastRequest = 0;
 function Player(username) {
 	if (typeof playersData[username] !== 'undefined') {
 		if (playersData[username] == null)
@@ -258,11 +431,11 @@ function Player(username) {
 	}
 
 	let id = 'p' + ~~(Math.random() * 999999 + 999999);
-	let wasLastPlayerAdded = lastPlayerAdded = Date.now();
+	lastRequest = Math.random();
+	let wasLastRequest = lastRequest;
 	playersToLoad[username] = id;
 	setTimeout(function () {
-		if (wasLastPlayerAdded == lastPlayerAdded && Object.keys(playersToLoad).length > 0) {
-			// load [playersToLoad]
+		if (lastRequest == wasLastRequest && Object.keys(playersToLoad).length > 0) {
 			GET(SERVER_HOST+'/account/info?usernames=' + Object.keys(playersToLoad).join(','), (status, data) => {
 				if (status && data.status === 'ok') {
 					let usernames = Object.keys(data.result)
@@ -272,11 +445,13 @@ function Player(username) {
 
 						if (userinfo != null) {
 							let playerElement = document.querySelector('#'+playersToLoad[usernames[i]]);
-							playerElement.querySelector('span.image').style.backgroundImage = "url('"+data.result[usernames[i]].image[64]+"')";
+							if (playerElement == null)
+								continue;
+							playerElement.querySelector('span.image').style.backgroundImage = "url('"+userinfo.image[64]+"')";
 							playerElement.className = 'bodjo-player';
-							delete playersToLoad[usernames[i]];
 						}
 					}
+					playersToLoad = {};
 				}
 			})
 		}
@@ -284,6 +459,28 @@ function Player(username) {
 
 	return "<div class='bodjo-player loading' id='"+id+"'><span class='image'></span><span class='username'>"+username+"</span></div>";
 }
+
+
+let lastOnlineList = null
+function updateOnline(onlines) {
+	if (typeof onlines === 'undefined') {
+		if (lastOnlineList == null)
+			return;
+		onlines = lastOnlineList;
+	}
+	lastOnlineList = onlines;
+	let players = document.querySelectorAll('.bodjo-player');
+	for (let i = 0; i < players.length; ++i) {
+		let player = players[i];
+		let username = player.getAttribute('username');
+		let online = onlines.indexOf(username) >= 0;
+		if (online)
+			addClass(player, 'online');
+		else
+			removeClass(player, 'online');
+	}
+}
+
 
 function GET(url, callback, shouldParse) {
 	if (typeof shouldParse === 'undefined')
@@ -329,4 +526,60 @@ function POST(url, before, callback) {
 		}
 
 	}
+}
+
+function B(x) {
+	let type, buff;
+	if (x instanceof ArrayBuffer) {
+		type = 3;
+		buff = x;
+	} else if (typeof x === 'string') {
+		type = 0;
+		buff = str2ab(x);
+	} else if (typeof x === 'object') {
+		type = 1;
+		buff = str2ab(JSON.stringify(x));
+	} else if (typeof x === 'number') {
+		type = 2;
+		buff = Int16(x);
+	}
+	return concat(Uint8(type), buff);
+}
+function ab2str(buf) {
+	return String.fromCharCode.apply(null, new Uint8Array(buf));
+}
+function str2ab(str) {
+	var buf = new ArrayBuffer(str.length);
+	var bufView = new Uint8Array(buf);
+	for (var i=0, strLen=str.length; i<strLen; i++) {
+		bufView[i] = str.charCodeAt(i);
+	}
+	return buf;
+}
+function concat() {
+	let buffers = arr(arguments);
+	let n = 0;
+	for (let i = 0; i < buffers.length; ++i)
+		n += buffers[i].byteLength;
+	let buff = new Uint8Array(n);
+	for (let i = 0, j = 0; i < buffers.length; ++i) {
+		buff.set(new Uint8Array(buffers[i]), j);
+		j += buffers[i].byteLength;
+	}
+	return buff;
+}
+function Uint8(x) {
+	let b = new Uint8Array(1);
+	b[0] = x;
+	return b.buffer;
+}
+function Uint16(x) {
+	let b = new Uint16Array(1);
+	b[0] = x;
+	return b.buffer;
+}
+function Int16(x) {
+	let b = new Int16Array(1);
+	b[0] = x;
+	return b.buffer;
 }

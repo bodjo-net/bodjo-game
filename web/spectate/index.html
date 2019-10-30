@@ -11,6 +11,8 @@
 	<link href="https://fonts.googleapis.com/css?family=Roboto+Mono:400,700|Source+Code+Pro:400,700&display=swap&subset=cyrillic" rel="stylesheet">
 </head>
 <body>
+	<style type="text/css">
+		#loading{font-family:'Source Code Pro','Roboto Mono',monospace;position:fixed;top:0;left:0;right:0;bottom:0;z-index:100500;overflow:hidden;background:#FAFAFA url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAMUlEQVR42u3QwQkAIAwDwG7iKI7m6lboBCL46B2EPAOJAADujcys/uKMr+qeDwAAT2xoNwH4CxjyzQAAAABJRU5ErkJggg==') repeat center;opacity: 1;transition: opacity 0.25s ease-in-out}#loading.hidden{opacity:0}#process>span{position:absolute;left:0;right:0;display:block;opacity:0;transition: top 0.125s ease-in-out,opacity 0.125s ease-in-out}#process>span:first-child{animation:fadein 0.25s 0s ease-in-out;opacity:1}#process>span:nth-child(2){opacity:0.875}#process>span:nth-child(3){opacity:0.75}#process>span:nth-child(4){opacity:0.625}#process>span:nth-child(5){opacity:0.5}#process>span:nth-child(6){opacity:0.375}#process>span:nth-child(7){opacity:0.25}#process>span:nth-child(8){opacity:0.125}@keyframes fadein {0% {opacity:0} 100% {opacity:1}}</style><div id="loading"><div style="z-index:1;position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle, rgba(250,250,250,1) 0%,rgba(250,250,250,0) 60%);"><div style="margin:auto;width:100%;max-width:350px;padding-top:40vh;"><h5 style="opacity:0.4;margin:0;text-align:center;"></h5><h1 style="text-align:center;margin:0 5px">bodjo-game</h1><h3 style="margin:0;text-align:center;opacity:0.5;margin-bottom:5px;"></h3><div id="process" style="font-size:80%;position:relative;"></div></div></div></div><script type="text/javascript">!function(){var _=document,$=_.querySelector.bind(_),e=$("#loading"),c=$("#process");window.Loading={put:function(e){console.log(e);var n=_.createElement("span");n.innerText=e,n.style.top="0px",c.insertBefore(n,c.firstChild);for(var t=0,o=0;t<c.children.length;++t){var i=c.children[t];i.style.top=o+"px",o+=i.scrollHeight}},hide:function(){e.className="hidden",setTimeout(function(){e.style.display="none"},250)},header:function(h,v){$('#loading h3').innerText=h;$('#loading h5').innerText=v;},show:function(){c.innerHTML="",e.style.display="block",setTimeout(function(){e.className=""},10)}}}();</script>
 	<div id="main">
 		<div id="workspace">
 			<div id="bar">
@@ -43,6 +45,7 @@
 			<span id="canvases-container"></span>
 		</div>
 	</div>
+	<script type="text/javascript" src="https://rawgit.com/darrachequesne/notepack/master/dist/notepack.js"></script>
 	<script type="text/javascript" src="/socket.io/socket.io.js"></script>
 	<script type="text/javascript" src="/polyfills.js"></script>
 	<script type="text/javascript" src="/spectate/engine.js"></script>
