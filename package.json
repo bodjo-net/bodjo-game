@@ -1,0 +1,21 @@
+{
+  "name": "bodjo-sandbox",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "dkaraush@gmail.com",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^14.0.4",
+    "cgroups": "^1.0.0",
+    "passwd": "0.0.11",
+    "test-prlimit": "1.0.1",
+    "typescript": "^3.9.3"
+  },
+  "devDependencies": {
+    "ts-node": "^8.10.1"
+  }
+}
